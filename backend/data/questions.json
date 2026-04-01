@@ -1,0 +1,181 @@
+[
+  {
+    "question_id": "q_emp_status",
+    "section": "Employment",
+    "text": "What is your current employment status?",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "employed",
+        "label": "Employed"
+      },
+      {
+        "id": "self_employed",
+        "label": "Self-employed"
+      },
+      {
+        "id": "unemployed",
+        "label": "Unemployed"
+      },
+      {
+        "id": "further_studies",
+        "label": "Pursuing Further Studies"
+      }
+    ],
+    "required": true,
+    "order": 1
+  },
+  {
+    "question_id": "q_employer_name",
+    "section": "Employment",
+    "text": "Name of your employer or company:",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 2
+  },
+  {
+    "question_id": "q_job_title",
+    "section": "Employment",
+    "text": "What is your current job title?",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 3
+  },
+  {
+    "question_id": "q_sector",
+    "section": "Employment",
+    "text": "Which sector does your employer belong to?",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "private",
+        "label": "Private"
+      },
+      {
+        "id": "government",
+        "label": "Government"
+      },
+      {
+        "id": "ngo",
+        "label": "NGO / Non-profit"
+      },
+      {
+        "id": "self",
+        "label": "Self-employed / Freelance"
+      }
+    ],
+    "required": false,
+    "order": 4
+  },
+  {
+    "question_id": "q_related",
+    "section": "Employment",
+    "text": "Is your current job related to your degree program?",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "yes",
+        "label": "Yes"
+      },
+      {
+        "id": "no",
+        "label": "No"
+      },
+      {
+        "id": "partially",
+        "label": "Partially"
+      }
+    ],
+    "required": false,
+    "order": 5
+  },
+  {
+    "question_id": "q_months_to_job",
+    "section": "Employment",
+    "text": "How many months after graduation did you find your first job?",
+    "type": "number",
+    "options": null,
+    "required": false,
+    "order": 6
+  },
+  {
+    "question_id": "q_job_desc",
+    "section": "Skills",
+    "text": "Briefly describe your main duties and responsibilities:",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 7
+  },
+  {
+    "question_id": "q_skills_used",
+    "section": "Skills",
+    "text": "What skills do you use most in your current job?",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 8
+  },
+  {
+    "question_id": "q_satisfaction",
+    "section": "Satisfaction",
+    "text": "How satisfied are you with your current job? (1 = Very dissatisfied, 5 = Very satisfied)",
+    "type": "scale",
+    "options": [
+      {
+        "id": "1",
+        "label": "1"
+      },
+      {
+        "id": "2",
+        "label": "2"
+      },
+      {
+        "id": "3",
+        "label": "3"
+      },
+      {
+        "id": "4",
+        "label": "4"
+      },
+      {
+        "id": "5",
+        "label": "5"
+      }
+    ],
+    "required": false,
+    "order": 9
+  },
+  {
+    "question_id": "q_curriculum",
+    "section": "Satisfaction",
+    "text": "How well did your degree curriculum prepare you for the workforce? (1 = Not at all, 5 = Very well)",
+    "type": "scale",
+    "options": [
+      {
+        "id": "1",
+        "label": "1"
+      },
+      {
+        "id": "2",
+        "label": "2"
+      },
+      {
+        "id": "3",
+        "label": "3"
+      },
+      {
+        "id": "4",
+        "label": "4"
+      },
+      {
+        "id": "5",
+        "label": "5"
+      }
+    ],
+    "required": false,
+    "order": 10
+  }
+]
