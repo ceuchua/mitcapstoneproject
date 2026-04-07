@@ -18,6 +18,7 @@ class RegisterRequest(BaseModel):
     # Student-only fields
     student_id:      Optional[str] = None
     program:         Optional[str] = None
+    major:           Optional[str] = None   # specialization / major / track
     graduation_year: Optional[int] = None
     sex:             Optional[str] = None
     contact_number:  Optional[str] = None
@@ -45,6 +46,7 @@ class ProfileUpdate(BaseModel):
     contact_number:  Optional[str] = None
     # Student-only
     program:         Optional[str] = None
+    major:           Optional[str] = None   # specialization / major / track
     graduation_year: Optional[int] = None
     sex:             Optional[str] = None
     # Student portfolio fields
@@ -63,6 +65,7 @@ class UserProfile(BaseModel):
     role:            str
     contact_number:  Optional[str] = None
     program:         Optional[str] = None
+    major:           Optional[str] = None
     graduation_year: Optional[int] = None
     sex:             Optional[str] = None
     bio:             Optional[str] = None
@@ -81,13 +84,16 @@ class QuestionOption(BaseModel):
     label: str
 
 class Question(BaseModel):
-    question_id:  str
-    section:      str           # e.g. "Employment", "Further Studies", "Skills"
-    text:         str
-    type:         str           # "text" | "single_choice" | "multi_choice" | "scale" | "number"
-    options:      Optional[list[QuestionOption]] = None
-    required:     bool = True
-    order:        int = 0
+    question_id:   str
+    section:       str
+    text:          str
+    type:          str           # "text" | "single_choice" | "multi_choice" | "scale" | "number"
+    options:       Optional[list[QuestionOption]] = None
+    required:      bool = True
+    order:         int = 0
+    semantic_role: Optional[str] = None   # stable analytics identifier
+    protected:     bool = False            # if True, cannot be deleted
+    enabled:       bool = True             # if False, hidden from tracer study
 
 class QuestionCreate(BaseModel):
     section:  str
@@ -104,6 +110,7 @@ class QuestionUpdate(BaseModel):
     options:  Optional[list[QuestionOption]] = None
     required: Optional[bool] = None
     order:    Optional[int] = None
+    enabled:  Optional[bool] = None
 
 
 # ── Tracer Study Response ─────────────────────────────────────────────────────
@@ -172,9 +179,15 @@ class SkillsGapResponse(BaseModel):
     surplus_skills:      list[str]
     alignment_score:     float
 
+class TaggedSkill(BaseModel):
+    skill:    str
+    category: str   # "technical" | "tool" | "soft" | "domain"
+
 class StudentSkillRecommendation(BaseModel):
     program:             str
+    major:               Optional[str] = None
     recommended_skills:  list[str]
+    tagged_skills:       list[TaggedSkill] = []
     skill_topics:        list[SkillTopicScore]
     program_profile:     list[str]
 
@@ -189,5 +202,22 @@ class StatsResponse(BaseModel):
     related_to_course_rate:      Optional[float]
     records_by_program:          dict[str, int]
     records_by_graduation_year:  dict[int, int]
-    top_gap_skills:              list[dict]
-    avg_alignment_by_program:    dict[str, float]
+    top_skills:                  list[dict]          # parsed from free-text answers
+    avg_satisfaction:            Optional[float]
+    avg_curriculum_rating:       Optional[float]
+    avg_months_to_employment:    Optional[float]
+
+
+# ── Super Admin ────────────────────────────────────────────────────────────────
+
+class CreateAdminRequest(BaseModel):
+    first_name: str
+    last_name:  str
+    email:      str
+    password:   str
+    role:       str = "admin"   # "admin" | "super_admin"
+
+class DeleteUserResponse(BaseModel):
+    status:  str
+    user_id: str
+    message: str

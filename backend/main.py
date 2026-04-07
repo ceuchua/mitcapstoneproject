@@ -22,8 +22,7 @@ Routes
 
   LDA
     GET  /api/lda/recommend         student skill recommendations by program
-    GET  /api/lda/industry-trends   admin industry skill trends
-    POST /api/lda/retrain           admin retrain model
+    POST /api/lda/reload            hot-reload joblib without restart
     GET  /api/lda/topics
 
   Employment (internal, triggered by questionnaire submission)
@@ -39,11 +38,17 @@ Routes
 """
 
 import uuid
-from datetime import datetime, timezone
+import logging
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone, timedelta
 
 from fastapi import FastAPI, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
+
+# ── Session config ─────────────────────────────────────────────────────────────
+# Inactivity timeout: token is invalidated if unused for this many minutes.
+SESSION_TIMEOUT_MINUTES = 30
 
 from schemas import (
     RegisterRequest, LoginRequest, AuthResponse,
@@ -54,22 +59,42 @@ from schemas import (
     SkillsGapRequest, SkillsGapResponse, SkillTopicScore,
     StudentSkillRecommendation,
     StatsResponse,
+    CreateAdminRequest, DeleteUserResponse,
 )
 from storage import (
     save_user, find_user_by_email, find_user_by_id, find_user_by_token,
-    update_user, list_users, email_exists, hash_password, verify_password,
+    update_user, list_users, email_exists, clear_all_tokens,
+    hash_password, verify_password,
     save_employment, read_employment_records, records_for_user,
     find_employment_record, all_job_texts,
-    read_questions, save_question, update_question, delete_question,
+    read_questions, read_questions_for_student, save_question,
+    update_question, delete_question, toggle_question_enabled,
+    get_answer_by_role, delete_user, has_super_admin,
+    get_response_by_id, delete_response,
     save_response, get_response_by_user, read_all_responses,
     compute_stats,
 )
 from lda_model import lda_analyzer
+from skill_parser import parse_skills, parse_skills_from_responses
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app):
+    # ── Startup: invalidate all sessions ──────────────────────────────────────
+    # Every server restart forces all users to log in again.
+    n = clear_all_tokens()
+    logger.info("Server startup: cleared %d active session(s).", n)
+    yield
+    # ── Shutdown (nothing extra needed) ───────────────────────────────────────
+
 
 app = FastAPI(
     title="Graduate Tracer System API",
     version="3.0.0",
     description="ML-powered graduate tracer system with LDA skills analysis.",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -80,7 +105,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-NOW = lambda: datetime.now(timezone.utc).isoformat()
+NOW      = lambda: datetime.now(timezone.utc).isoformat()
+EXPIRES  = lambda: (datetime.now(timezone.utc) + timedelta(minutes=SESSION_TIMEOUT_MINUTES)).isoformat()
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -89,15 +115,35 @@ def _get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header missing.")
     token = authorization.replace("Bearer ", "").strip()
-    user = find_user_by_token(token)
+    user  = find_user_by_token(token)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired token.")
+
+    # Check inactivity expiry
+    expires_at = user.get("token_expires_at")
+    if expires_at:
+        expiry_dt = datetime.fromisoformat(expires_at)
+        if datetime.now(timezone.utc) > expiry_dt:
+            # Invalidate the token so it cannot be reused
+            update_user(user["user_id"], {"token": None, "token_expires_at": None})
+            raise HTTPException(status_code=401, detail="Session expired due to inactivity. Please log in again.")
+
+    # Slide the expiry window on every valid request
+    update_user(user["user_id"], {"token_expires_at": EXPIRES()})
     return user
 
 def _require_admin(authorization: Optional[str] = Header(None)) -> dict:
+    """Allows both admin and super_admin roles."""
     user = _get_current_user(authorization)
-    if user.get("role") != "admin":
+    if user.get("role") not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required.")
+    return user
+
+def _require_super_admin(authorization: Optional[str] = Header(None)) -> dict:
+    """Only allows super_admin role."""
+    user = _get_current_user(authorization)
+    if user.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="Super admin access required.")
     return user
 
 def _require_student(authorization: Optional[str] = Header(None)) -> dict:
@@ -111,7 +157,23 @@ def _require_student(authorization: Optional[str] = Header(None)) -> dict:
 
 @app.get("/api/health", tags=["System"])
 def health():
-    return {"status": "ok", "lda_trained": lda_analyzer.is_trained, "version": "3.0.0"}
+    return {
+        "status": "ok",
+        "lda_trained": lda_analyzer.is_trained,
+        "version": "3.0.0",
+        "session_timeout_minutes": SESSION_TIMEOUT_MINUTES,
+    }
+
+
+@app.post("/api/auth/logout", tags=["Auth"])
+def logout(authorization: Optional[str] = Header(None)):
+    """Explicitly invalidate the session token on sign-out."""
+    if authorization:
+        token = authorization.replace("Bearer ", "").strip()
+        user  = find_user_by_token(token)
+        if user:
+            update_user(user["user_id"], {"token": None, "token_expires_at": None})
+    return {"status": "logged_out"}
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -120,12 +182,13 @@ def health():
 def register(req: RegisterRequest):
     if email_exists(req.email):
         raise HTTPException(status_code=409, detail="Email already registered.")
-    if req.role not in ("student", "admin"):
-        raise HTTPException(status_code=400, detail="Role must be 'student' or 'admin'.")
+    if req.role != "student":
+        raise HTTPException(status_code=400, detail="Self-registration is only available for students. Admin accounts are created by a super administrator.")
     if req.role == "student" and not req.program:
         raise HTTPException(status_code=400, detail="Program is required for students.")
 
     token = str(uuid.uuid4())
+    expires = EXPIRES()
     user = {
         "user_id":          str(uuid.uuid4()),
         "first_name":       req.first_name,
@@ -134,8 +197,10 @@ def register(req: RegisterRequest):
         "password_hash":    hash_password(req.password),
         "role":             req.role,
         "token":            token,
+        "token_expires_at": expires,
         "student_id":       req.student_id,
         "program":          req.program,
+        "major":            req.major,
         "graduation_year":  req.graduation_year,
         "sex":              req.sex,
         "contact_number":   req.contact_number,
@@ -159,9 +224,9 @@ def login(req: LoginRequest):
     user = find_user_by_email(req.email)
     if not user or not verify_password(req.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
-    # Refresh token on each login
+    # Refresh token on each login and set expiry
     token = str(uuid.uuid4())
-    update_user(user["user_id"], {"token": token})
+    update_user(user["user_id"], {"token": token, "token_expires_at": EXPIRES()})
     return AuthResponse(
         user_id=user["user_id"], first_name=user["first_name"],
         last_name=user["last_name"], email=user["email"],
@@ -195,8 +260,17 @@ def list_all_users(role: Optional[str] = None, authorization: Optional[str] = He
 # ── Questionnaire Questions ───────────────────────────────────────────────────
 
 @app.get("/api/questionnaire/questions", response_model=list[Question], tags=["Questionnaire"])
-def get_questions():
-    return [Question(**q) for q in read_questions()]
+def get_questions(authorization: Optional[str] = Header(None)):
+    # Admins & super_admins see all questions (for editing)
+    # Students & unauthenticated (questionnaire preview) see only enabled ones
+    try:
+        user = _get_current_user(authorization)
+        role = user.get("role", "")
+    except Exception:
+        role = ""
+    if role in ("admin", "super_admin"):
+        return [Question(**q) for q in read_questions()]
+    return [Question(**q) for q in read_questions_for_student()]
 
 
 @app.post("/api/questionnaire/questions", response_model=Question, tags=["Questionnaire"])
@@ -223,7 +297,13 @@ def edit_question(question_id: str, req: QuestionUpdate, authorization: Optional
 @app.delete("/api/questionnaire/questions/{question_id}", tags=["Questionnaire"])
 def remove_question(question_id: str, authorization: Optional[str] = Header(None)):
     _require_admin(authorization)
-    if not delete_question(question_id):
+    success, reason = delete_question(question_id)
+    if not success:
+        if reason == "protected":
+            raise HTTPException(
+                status_code=403,
+                detail="This question is protected and cannot be deleted. You may edit its text but not remove it.",
+            )
         raise HTTPException(status_code=404, detail="Question not found.")
     return {"status": "deleted", "question_id": question_id}
 
@@ -244,36 +324,11 @@ def submit_response(req: TracerResponse, authorization: Optional[str] = Header(N
     }
     save_response(record)
 
-    # Auto-trigger LDA gap analysis if job text is present in answers
-    job_text = " ".join(filter(None, [
-        req.answers.get("q_job_title", ""),
-        req.answers.get("q_job_desc", ""),
-        req.answers.get("q_skills_used", ""),
-    ])).strip()
-
-    if job_text and req.answers.get("q_emp_status") in ("employed", "self_employed"):
-        program = user.get("program", "")
-        gap = lda_analyzer.analyze_gap(job_text=job_text, program=program)
-        emp_record = {
-            "record_id":              str(uuid.uuid4()),
-            "graduate_id":            user["user_id"],
-            "employment_status":      req.answers.get("q_emp_status", ""),
-            "employer_name":          req.answers.get("q_employer_name"),
-            "employer_sector":        req.answers.get("q_sector"),
-            "job_title":              req.answers.get("q_job_title"),
-            "job_description":        req.answers.get("q_job_desc"),
-            "job_skills_required":    req.answers.get("q_skills_used"),
-            "is_related_to_course":   req.answers.get("q_related") == "yes",
-            "months_to_employment":   req.answers.get("q_months_to_job"),
-            "detected_skill_topics":  [t["label"] for t in gap["skill_topics"]],
-            "skills_in_job":          gap["skills_in_job"],
-            "skills_from_program":    gap["skills_from_program"],
-            "gap_skills":             gap["gap_skills"],
-            "alignment_score":        gap["alignment_score"],
-            "lda_topic_distribution": gap["lda_topic_distribution"],
-            "created_at":             NOW(),
-        }
-        save_employment(emp_record)
+    # Parse skills from the free-text answer (role-based lookup)
+    questions   = read_questions()
+    raw_skills  = get_answer_by_role(req.answers, "skills_free_text") or ""
+    parsed_skills = parse_skills(raw_skills)
+    record["parsed_skills"] = parsed_skills
 
     return TracerResponseRecord(**record)
 
@@ -293,30 +348,39 @@ def get_all_responses(authorization: Optional[str] = Header(None)):
     return read_all_responses()
 
 
+@app.delete("/api/questionnaire/responses/{response_id}", tags=["Questionnaire"])
+def admin_delete_response(response_id: str, authorization: Optional[str] = Header(None)):
+    """Admin: permanently delete a tracer study response."""
+    _require_admin(authorization)
+    if not delete_response(response_id):
+        raise HTTPException(status_code=404, detail="Response not found.")
+    return {"status": "deleted", "response_id": response_id}
+
+
+
 # ── LDA ───────────────────────────────────────────────────────────────────────
 
 @app.get("/api/lda/recommend", tags=["LDA"])
 def student_skill_recommendations(
     program: str = Query(..., description="Degree program"),
+    major:   str = Query("",  description="Specialization or major (optional)"),
     authorization: Optional[str] = Header(None),
 ):
-    """Student-facing: recommend skills to develop based on degree program."""
+    """Student-facing: recommend skills based on degree program + major/specialization."""
     _get_current_user(authorization)
-    return lda_analyzer.recommend_for_student(program)
+    return lda_analyzer.recommend_for_student(program, major=major)
 
 
-@app.get("/api/lda/industry-trends", tags=["LDA"])
-def industry_skill_trends(authorization: Optional[str] = Header(None)):
-    """Admin-facing: analyze top skill trends across all employment records."""
+
+
+@app.post("/api/lda/reload", tags=["LDA"])
+def reload_model(authorization: Optional[str] = Header(None)):
+    """
+    Hot-reload lda_model.joblib without restarting the server.
+    Use this after replacing the joblib file with a newly trained model.
+    """
     _require_admin(authorization)
-    texts = all_job_texts()
-    return lda_analyzer.analyze_industry_trends(texts)
-
-
-@app.post("/api/lda/retrain", tags=["LDA"])
-def retrain_model(authorization: Optional[str] = Header(None)):
-    _require_admin(authorization)
-    return lda_analyzer.retrain(all_job_texts())
+    return lda_analyzer.reload()
 
 
 @app.get("/api/lda/topics", tags=["LDA"])
@@ -325,6 +389,13 @@ def lda_topics():
 
 
 # ── Employment Records (admin view) ───────────────────────────────────────────
+
+@app.get("/api/employment/me", tags=["Employment"])
+def get_my_employment(authorization: Optional[str] = Header(None)):
+    """Student: fetch their own employment records."""
+    user = _get_current_user(authorization)
+    return [EmploymentResponse(**r) for r in records_for_user(user["user_id"])]
+
 
 @app.get("/api/employment", response_model=list[EmploymentResponse], tags=["Employment"])
 def list_employment(limit: int = 100, authorization: Optional[str] = Header(None)):
@@ -340,3 +411,176 @@ def get_stats(authorization: Optional[str] = Header(None)):
     s = compute_stats()
     s["records_by_graduation_year"] = {int(k): v for k, v in s["records_by_graduation_year"].items()}
     return StatsResponse(**s)
+
+
+@app.get("/api/lda/skill-trends", tags=["LDA"])
+def skill_trends_from_responses(authorization: Optional[str] = Header(None)):
+    """
+    Admin: run LDA on aggregated free-text skill answers from all responses.
+    This is the correct corpus-level use of LDA — across all graduates,
+    not on a single student's submission.
+    """
+    _require_admin(authorization)
+    questions = read_questions()
+    responses = read_all_responses()
+    # Collect all job description + skills text per response (role-based)
+    job_texts = []
+    for r in responses:
+        ans   = r.get("answers", {})
+        parts = [
+            get_answer_by_role(ans, "job_title")       or "",
+            get_answer_by_role(ans, "job_description") or "",
+            get_answer_by_role(ans, "skills_free_text") or "",
+        ]
+        combined = " ".join(p for p in parts if p).strip()
+        if combined:
+            job_texts.append(combined)
+    return lda_analyzer.analyze_industry_trends(job_texts)
+
+
+# ── Question toggle (admin) ───────────────────────────────────────────────────
+
+@app.patch("/api/questionnaire/questions/{question_id}/toggle", response_model=Question, tags=["Questionnaire"])
+def toggle_question(question_id: str, authorization: Optional[str] = Header(None)):
+    """
+    Enable or disable a question.
+    Disabled questions are hidden from the tracer study but preserved for data continuity.
+    Protected questions can be disabled but not deleted.
+    """
+    _require_admin(authorization)
+    q = next((q for q in read_questions() if q["question_id"] == question_id), None)
+    if not q:
+        raise HTTPException(status_code=404, detail="Question not found.")
+    updated = toggle_question_enabled(question_id, not q.get("enabled", True))
+    return Question(**updated)
+
+
+# ── Super Admin: account management ──────────────────────────────────────────
+
+@app.post("/api/auth/init-superadmin", tags=["Auth"])
+def init_superadmin(req: CreateAdminRequest):
+    """
+    Bootstrap endpoint: creates the first super admin account.
+    Only works if no super_admin exists yet in the system.
+    Disable or remove this route after initial setup.
+    """
+    if has_super_admin():
+        raise HTTPException(status_code=409, detail="A super admin already exists. Use the admin panel to manage accounts.")
+    if email_exists(req.email):
+        raise HTTPException(status_code=409, detail="Email already registered.")
+
+    token = str(uuid.uuid4())
+    user  = {
+        "user_id":          str(uuid.uuid4()),
+        "first_name":       req.first_name,
+        "last_name":        req.last_name,
+        "email":            req.email,
+        "password_hash":    hash_password(req.password),
+        "role":             "super_admin",
+        "token":            token,
+        "token_expires_at": EXPIRES(),
+        "student_id":       None,
+        "program":          None,
+        "major":            None,
+        "graduation_year":  None,
+        "sex":              None,
+        "contact_number":   None,
+        "bio":              None,
+        "current_job":      None,
+        "current_employer": None,
+        "linkedin_url":     None,
+        "skills_self_reported": [],
+        "created_at":       NOW(),
+    }
+    save_user(user)
+    return AuthResponse(
+        user_id=user["user_id"], first_name=user["first_name"],
+        last_name=user["last_name"], email=user["email"],
+        role=user["role"], token=token,
+    )
+
+
+@app.post("/api/admin/accounts", response_model=AuthResponse, tags=["Super Admin"])
+def create_admin_account(req: CreateAdminRequest, authorization: Optional[str] = Header(None)):
+    """Super admin: create a new admin or super_admin account."""
+    _require_super_admin(authorization)
+    if req.role not in ("admin", "super_admin"):
+        raise HTTPException(status_code=400, detail="Role must be 'admin' or 'super_admin'.")
+    if email_exists(req.email):
+        raise HTTPException(status_code=409, detail="Email already registered.")
+
+    token = str(uuid.uuid4())
+    user  = {
+        "user_id":          str(uuid.uuid4()),
+        "first_name":       req.first_name,
+        "last_name":        req.last_name,
+        "email":            req.email,
+        "password_hash":    hash_password(req.password),
+        "role":             req.role,
+        "token":            token,
+        "token_expires_at": EXPIRES(),
+        "student_id":       None,
+        "program":          None,
+        "major":            None,
+        "graduation_year":  None,
+        "sex":              None,
+        "contact_number":   None,
+        "bio":              None,
+        "current_job":      None,
+        "current_employer": None,
+        "linkedin_url":     None,
+        "skills_self_reported": [],
+        "created_at":       NOW(),
+    }
+    save_user(user)
+    return AuthResponse(
+        user_id=user["user_id"], first_name=user["first_name"],
+        last_name=user["last_name"], email=user["email"],
+        role=user["role"], token=token,
+    )
+
+
+@app.get("/api/admin/accounts", tags=["Super Admin"])
+def list_admin_accounts(authorization: Optional[str] = Header(None)):
+    """Super admin: list all admin and super_admin accounts."""
+    _require_super_admin(authorization)
+    users = [u for u in list_users() if u.get("role") in ("admin", "super_admin")]
+    return [UserProfile(**{k: v for k, v in u.items() if k != "password_hash"}) for u in users]
+
+
+@app.delete("/api/admin/accounts/{user_id}", response_model=DeleteUserResponse, tags=["Super Admin"])
+def delete_admin_account(user_id: str, authorization: Optional[str] = Header(None)):
+    """Super admin: delete an admin account. Cannot delete your own account."""
+    me = _require_super_admin(authorization)
+    if me["user_id"] == user_id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account.")
+    target = find_user_by_id(user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Account not found.")
+    if target.get("role") == "super_admin":
+        raise HTTPException(status_code=403, detail="Super admin accounts cannot be deleted through this endpoint.")
+    delete_user(user_id)
+    return DeleteUserResponse(status="deleted", user_id=user_id,
+        message=f"Account for {target['first_name']} {target['last_name']} has been deleted.")
+
+
+@app.delete("/api/users/{user_id}", response_model=DeleteUserResponse, tags=["Super Admin"])
+def delete_student_account(user_id: str, authorization: Optional[str] = Header(None)):
+    """Super admin: delete a student account."""
+    _require_super_admin(authorization)
+    target = find_user_by_id(user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if target.get("role") != "student":
+        raise HTTPException(status_code=400, detail="This endpoint only deletes student accounts.")
+    delete_user(user_id)
+    return DeleteUserResponse(status="deleted", user_id=user_id,
+        message=f"Student account for {target['first_name']} {target['last_name']} has been deleted.")
+
+
+@app.get("/api/users/all", tags=["Super Admin"])
+def list_all_users_superadmin(authorization: Optional[str] = Header(None)):
+    """Super admin: list every account in the system."""
+    _require_super_admin(authorization)
+    all_users = list_users()
+    return [UserProfile(**{k: v for k, v in u.items() if k != "password_hash"}) for u in all_users]

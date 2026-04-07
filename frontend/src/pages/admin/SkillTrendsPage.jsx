@@ -22,7 +22,7 @@ export default function SkillTrendsPage() {
   async function load() {
     setLoading(true);
     try {
-      const [t, tp] = await Promise.all([api.getIndustryTrends(), api.getLdaTopics()]);
+      const [t, tp] = await Promise.all([api.getSkillTrends(), api.getLdaTopics()]);
       setTrends(t);
       setTopics(tp.topics || []);
     } catch (e) {
@@ -33,7 +33,7 @@ export default function SkillTrendsPage() {
   async function retrain() {
     setRetraining(true); setRetResult(null);
     try {
-      const r = await api.retrainModel();
+      const r = await api.reloadModel();
       setRetResult(r);
       await load();
     } catch (e) { setRetResult({ status: "error", reason: e.message }); }
@@ -68,12 +68,12 @@ export default function SkillTrendsPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
         <div>
           <h1 className="page-title">Industry Skill Trends</h1>
-          <p className="page-sub">LDA analysis of skill demands across all graduate employment records</p>
+          <p className="page-sub">Domains, skills, and topics across all graduate employment records</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => exportCSV(trends, "skill_trends.json")}>⬇ Export</button>
           <button className="btn btn-primary btn-sm" onClick={retrain} disabled={retraining}>
-            {retraining ? <><div className="spinner" />Retraining…</> : "🔄 Retrain Model"}
+            {retraining ? <><div className="spinner" />Reloading…</> : "Reload Model"}
           </button>
         </div>
       </div>
@@ -99,9 +99,9 @@ export default function SkillTrendsPage() {
           {/* Summary stats */}
           <div className="grid-3 section">
             {[
-              { label: "Records Analyzed", value: trends?.n_records_analyzed ?? 0, icon: "📄" },
-              { label: "Skill Domains",    value: trends?.top_skill_domains?.length ?? 0, icon: "🗂" },
-              { label: "Unique Skills",    value: trends?.top_skills_overall?.length ?? 0, icon: "🔑" },
+              { label: "Records Analyzed", value: trends?.n_records_analyzed ?? 0,},
+              { label: "Skill Domains",    value: trends?.top_skill_domains?.length ?? 0,},
+              { label: "Unique Skills",    value: trends?.top_skills_overall?.length ?? 0,},
             ].map(s => (
               <div className="stat-tile" key={s.label}>
                 <div style={{ fontSize: 22, marginBottom: 6 }}>{s.icon}</div>

@@ -61,7 +61,7 @@ export default function GraduatesPage() {
         {loading ? (
           <div className="empty"><div className="spinner spinner-dark" /><div style={{ marginTop: 10 }}>Loading…</div></div>
         ) : filtered.length === 0 ? (
-          <div className="empty"><div className="empty-icon">🎓</div>No graduates found.</div>
+          <div className="empty"><div className="empty-icon"></div>No graduates found.</div>
         ) : (
           <table className="table">
             <thead><tr>

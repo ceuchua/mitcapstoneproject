@@ -3,16 +3,32 @@
 import { T } from "../tokens";
 
 const STUDENT_PAGES = [
-  { id: "portfolio",    label: "My Portfolio",    icon: "👤" },
-  { id: "tracer",       label: "Tracer Study",    icon: "📋" },
+  { id: "portfolio",    label: "My Portfolio", },
+  { id: "tracer",       label: "Tracer Study", },
 ];
 
 const ADMIN_PAGES = [
-  { id: "dashboard",    label: "Dashboard",       icon: "◉" },
-  { id: "skill-trends", label: "Skill Trends",    icon: "📈" },
-  { id: "questionnaire",label: "Questionnaire",   icon: "📝" },
-  { id: "graduates",    label: "Graduates",        icon: "🎓" },
+  { id: "dashboard",    label: "Dashboard",     },
+  { id: "skill-trends", label: "Skill Trends",  },
+  { id: "questionnaire",label: "Questionnaire", },
+  { id: "graduates",    label: "Graduates",     },
 ];
+
+// Super admin gets all admin pages + account management
+const SUPER_ADMIN_PAGES = [
+  { id: "dashboard",    label: "Dashboard",},
+  { id: "skill-trends", label: "Skill Trends",},
+  { id: "questionnaire",label: "Questionnaire",},
+  { id: "graduates",    label: "Graduates",},
+  { id: "divider",      label: "",},  // visual separator
+  { id: "accounts",     label: "Account Management",},
+];
+
+const ROLE_LABEL = {
+  admin:       "Administrator",
+  super_admin: "Super Administrator",
+  student:     "Student",
+};
 
 const css = `
   .sidebar {
@@ -31,6 +47,7 @@ const css = `
     text-transform: uppercase; color: ${T.accent};
     padding: 0 22px; margin-bottom: 8px;
   }
+  .sidebar-role.super { color: #f0c040; }
   .nav-item {
     display: flex; align-items: center; gap: 10px;
     padding: 10px 22px; cursor: pointer; color: rgba(255,255,255,0.55);
@@ -39,7 +56,9 @@ const css = `
   }
   .nav-item:hover { color: #fff; background: rgba(255,255,255,0.06); }
   .nav-item.active { color: #fff; border-left-color: ${T.accent}; background: rgba(200,82,10,0.12); }
+  .nav-item.super-active { color: #fff; border-left-color: #f0c040; background: rgba(240,192,64,0.12); }
   .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+  .nav-divider { border-top: 1px solid rgba(255,255,255,0.08); margin: 8px 22px; }
   .sidebar-footer { margin-top: auto; padding: 20px 22px 0; border-top: 1px solid rgba(255,255,255,0.08); }
   .sidebar-user { color: rgba(255,255,255,.7); font-size: 12px; margin-bottom: 10px; }
   .sidebar-user strong { display: block; color: #fff; font-size: 13px; margin-bottom: 2px; }
@@ -47,7 +66,13 @@ const css = `
 `;
 
 export default function Sidebar({ page, setPage, user, healthy, onLogout }) {
-  const pages = user?.role === "admin" ? ADMIN_PAGES : STUDENT_PAGES;
+  const role = user?.role;
+
+  const pages = role === "super_admin" ? SUPER_ADMIN_PAGES
+    : role === "admin"   ? ADMIN_PAGES
+    : STUDENT_PAGES;
+
+  const isSuperAdmin = role === "super_admin";
 
   return (
     <>
@@ -56,13 +81,22 @@ export default function Sidebar({ page, setPage, user, healthy, onLogout }) {
         <div className="sidebar-logo">
           Graduate<br /><span>Tracer</span><br />System
         </div>
-        <div className="sidebar-role">{user?.role === "admin" ? "Administrator" : "Student"}</div>
 
-        {pages.map(p => (
-          <div key={p.id} className={`nav-item ${page === p.id ? "active" : ""}`} onClick={() => setPage(p.id)}>
-            <span className="nav-icon">{p.icon}</span> {p.label}
-          </div>
-        ))}
+        <div className={`sidebar-role ${isSuperAdmin ? "super" : ""}`}>
+          {isSuperAdmin && "⭐ "}{ROLE_LABEL[role] || role}
+        </div>
+
+        {pages.map(p => {
+          if (p.id === "divider") return <div key="divider" className="nav-divider" />;
+          const isActive = page === p.id;
+          return (
+            <div key={p.id}
+              className={`nav-item ${isActive ? (isSuperAdmin && p.id === "accounts" ? "super-active" : "active") : ""}`}
+              onClick={() => setPage(p.id)}>
+              <span className="nav-icon">{p.icon}</span> {p.label}
+            </div>
+          );
+        })}
 
         <div className="sidebar-footer">
           <div className="sidebar-user">

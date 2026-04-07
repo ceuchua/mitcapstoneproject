@@ -103,7 +103,7 @@ export default function TracerStudyPage({ user }) {
 
       {questions.length === 0 && (
         <div className="empty card">
-          <div className="empty-icon">📋</div>
+          <div className="empty-icon"></div>
           No questions have been configured yet. Please check back later.
         </div>
       )}

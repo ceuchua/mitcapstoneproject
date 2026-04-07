@@ -23,7 +23,10 @@
       }
     ],
     "required": true,
-    "order": 1
+    "order": 1,
+    "semantic_role": "employment_status",
+    "protected": true,
+    "enabled": true
   },
   {
     "question_id": "q_employer_name",
@@ -32,7 +35,10 @@
     "type": "text",
     "options": null,
     "required": false,
-    "order": 2
+    "order": 2,
+    "semantic_role": "employer_name",
+    "protected": true,
+    "enabled": true
   },
   {
     "question_id": "q_job_title",
@@ -41,7 +47,10 @@
     "type": "text",
     "options": null,
     "required": false,
-    "order": 3
+    "order": 3,
+    "semantic_role": "job_title",
+    "protected": true,
+    "enabled": true
   },
   {
     "question_id": "q_sector",
@@ -67,7 +76,10 @@
       }
     ],
     "required": false,
-    "order": 4
+    "order": 4,
+    "semantic_role": "employer_sector",
+    "protected": true,
+    "enabled": true
   },
   {
     "question_id": "q_related",
@@ -89,7 +101,10 @@
       }
     ],
     "required": false,
-    "order": 5
+    "order": 5,
+    "semantic_role": "course_relevance",
+    "protected": true,
+    "enabled": true
   },
   {
     "question_id": "q_months_to_job",
@@ -98,7 +113,10 @@
     "type": "number",
     "options": null,
     "required": false,
-    "order": 6
+    "order": 6,
+    "semantic_role": "months_to_employment",
+    "protected": false,
+    "enabled": true
   },
   {
     "question_id": "q_job_desc",
@@ -107,7 +125,10 @@
     "type": "text",
     "options": null,
     "required": false,
-    "order": 7
+    "order": 7,
+    "semantic_role": "job_description",
+    "protected": true,
+    "enabled": true
   },
   {
     "question_id": "q_skills_used",
@@ -116,7 +137,10 @@
     "type": "text",
     "options": null,
     "required": false,
-    "order": 8
+    "order": 8,
+    "semantic_role": "skills_free_text",
+    "protected": true,
+    "enabled": true
   },
   {
     "question_id": "q_satisfaction",
@@ -146,7 +170,10 @@
       }
     ],
     "required": false,
-    "order": 9
+    "order": 9,
+    "semantic_role": "satisfaction_rating",
+    "protected": false,
+    "enabled": true
   },
   {
     "question_id": "q_curriculum",
@@ -176,6 +203,9 @@
       }
     ],
     "required": false,
-    "order": 10
+    "order": 10,
+    "semantic_role": "curriculum_rating",
+    "protected": false,
+    "enabled": true
   }
 ]
