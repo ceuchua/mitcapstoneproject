@@ -103,23 +103,32 @@ def parse_skills_from_responses(
     """
     Extract and flatten all skill answers across all responses.
     Looks for questions with semantic_role == 'skills_free_text'.
+    Handles both free-text (str) and multi_choice (list of option IDs).
     Returns a flat list of all parsed skill strings (with repetitions,
     so frequency can be counted by the caller).
     """
-    skill_qids = [
-        q["question_id"]
-        for q in questions
+    # Build a lookup: question_id → option labels for multi_choice questions
+    skill_questions = [
+        q for q in questions
         if q.get("semantic_role") == "skills_free_text"
     ]
-    if not skill_qids:
+    if not skill_questions:
         return []
 
     all_skills: list[str] = []
     for r in responses:
         answers = r.get("answers", {})
-        for qid in skill_qids:
-            raw = answers.get(qid, "")
-            if raw:
+        for q in skill_questions:
+            qid = q["question_id"]
+            raw = answers.get(qid)
+            if not raw:
+                continue
+            # Multi-choice answer: list of option IDs → resolve to labels
+            if isinstance(raw, list):
+                opt_map = {o["id"]: o["label"] for o in (q.get("options") or [])}
+                labels  = [opt_map.get(oid, oid) for oid in raw]
+                all_skills.extend(labels)
+            else:
                 all_skills.extend(parse_skills(str(raw)))
 
     return all_skills

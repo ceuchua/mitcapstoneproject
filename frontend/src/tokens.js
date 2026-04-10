@@ -6,7 +6,7 @@ export const T = {
   border:     "#E4DDD3",
   ink:        "#1A1714",
   inkMuted:   "#7A7168",
-  accent:     "#C8520A",
+  accent:     "#800E13",
   accentSoft: "#F5E8DE",
   green:      "#2D7A4F",
   greenSoft:  "#DFF0E8",
@@ -14,7 +14,7 @@ export const T = {
   redSoft:    "#FAE5E3",
   yellow:     "#B07D1A",
   yellowSoft: "#FBF2DC",
-  sidebar:    "#1A1714",
+  sidebar:    "#640D14",
 };
 
 export const globalCss = `
@@ -52,10 +52,10 @@ export const globalCss = `
 
   .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: 'DM Sans', sans-serif; transition: all .15s; }
   .btn-primary { background: ${T.accent}; color: #fff; }
-  .btn-primary:hover { background: #a84208; }
-  .btn-primary:disabled { background: #c9b8ae; cursor: not-allowed; }
+  .btn-primary:hover { background: #640D14; }
+  .btn-primary:disabled { background: #C17171; cursor: not-allowed; }
   .btn-secondary { background: transparent; color: ${T.ink}; border: 1px solid ${T.border}; }
-  .btn-secondary:hover { background: ${T.bg}; }
+  .btn-secondary:hover { background: #fff; color: #000; }
   .btn-danger { background: transparent; color: ${T.red}; border: 1px solid ${T.red}; }
   .btn-danger:hover { background: ${T.redSoft}; }
   .btn-sm { padding: 6px 12px; font-size: 12px; }

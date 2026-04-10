@@ -324,10 +324,16 @@ def submit_response(req: TracerResponse, authorization: Optional[str] = Header(N
     }
     save_response(record)
 
-    # Parse skills from the free-text answer (role-based lookup)
-    questions   = read_questions()
-    raw_skills  = get_answer_by_role(req.answers, "skills_free_text") or ""
-    parsed_skills = parse_skills(raw_skills)
+    # Parse skills — multi_choice (list of option IDs) or legacy free-text
+    questions     = read_questions()
+    raw_skills    = get_answer_by_role(req.answers, "skills_free_text")
+    if isinstance(raw_skills, list):
+        # Resolve option IDs to labels using the question definition
+        skill_q   = next((q for q in questions if q.get("semantic_role") == "skills_free_text"), None)
+        opt_map   = {o["id"]: o["label"] for o in (skill_q.get("options") or [])} if skill_q else {}
+        parsed_skills = [opt_map.get(oid, oid) for oid in raw_skills]
+    else:
+        parsed_skills = parse_skills(raw_skills or "")
     record["parsed_skills"] = parsed_skills
 
     return TracerResponseRecord(**record)
@@ -424,13 +430,24 @@ def skill_trends_from_responses(authorization: Optional[str] = Header(None)):
     questions = read_questions()
     responses = read_all_responses()
     # Collect all job description + skills text per response (role-based)
+    # Build option label maps for multi_choice semantic-role questions
+    q_map = {q.get("semantic_role"): q for q in questions if q.get("semantic_role")}
+    def _opt_label(q_obj, val):
+        """Resolve a single_choice/multi_choice answer value to human-readable text."""
+        if not q_obj or not val:
+            return ""
+        opts = {o["id"]: o["label"] for o in (q_obj.get("options") or [])}
+        if isinstance(val, list):
+            return " ".join(opts.get(v, v) for v in val)
+        return opts.get(val, val)
+
     job_texts = []
     for r in responses:
         ans   = r.get("answers", {})
         parts = [
-            get_answer_by_role(ans, "job_title")       or "",
+            _opt_label(q_map.get("job_title"),       get_answer_by_role(ans, "job_title")),
             get_answer_by_role(ans, "job_description") or "",
-            get_answer_by_role(ans, "skills_free_text") or "",
+            _opt_label(q_map.get("skills_free_text"), get_answer_by_role(ans, "skills_free_text")),
         ]
         combined = " ".join(p for p in parts if p).strip()
         if combined:

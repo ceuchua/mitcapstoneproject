@@ -73,7 +73,7 @@ export default function AuthPage({ onLogin }) {
       <style>{css}</style>
       <div className="auth-wrap">
         <div className="auth-box fade-up">
-          <div className="auth-logo">Graduate <span>Tracer</span> System</div>
+          <div className="auth-logo">Graduate Tracer System</div>
           <div className="auth-sub">
             {mode === "login" ? "Sign in to your account" : "Create a student account"}
           </div>

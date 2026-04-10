@@ -1,90 +1,700 @@
 [
   {
+    "question_id": "q_permanent_address",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "General Information",
+    "text": "Permanent Address",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 1
+  },
+  {
+    "question_id": "q_civil_status",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "General Information",
+    "text": "Civil Status",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "single",
+        "label": "Single"
+      },
+      {
+        "id": "married",
+        "label": "Married"
+      },
+      {
+        "id": "separated",
+        "label": "Separated / Divorced"
+      },
+      {
+        "id": "single_parent",
+        "label": "Single Parent"
+      },
+      {
+        "id": "widow",
+        "label": "Widow or Widower"
+      }
+    ],
+    "required": false,
+    "order": 2
+  },
+  {
+    "question_id": "q_sex",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "General Information",
+    "text": "Sex",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "male",
+        "label": "Male"
+      },
+      {
+        "id": "female",
+        "label": "Female"
+      }
+    ],
+    "required": false,
+    "order": 3
+  },
+  {
+    "question_id": "q_birthday",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "General Information",
+    "text": "Birthday (Month / Day / Year)",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 4
+  },
+  {
+    "question_id": "q_region",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "General Information",
+    "text": "Region of Origin",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "r1",
+        "label": "Region I"
+      },
+      {
+        "id": "r2",
+        "label": "Region II"
+      },
+      {
+        "id": "r3",
+        "label": "Region III"
+      },
+      {
+        "id": "r4",
+        "label": "Region IV"
+      },
+      {
+        "id": "r5",
+        "label": "Region V"
+      },
+      {
+        "id": "r6",
+        "label": "Region VI"
+      },
+      {
+        "id": "r7",
+        "label": "Region VII"
+      },
+      {
+        "id": "r8",
+        "label": "Region VIII"
+      },
+      {
+        "id": "r9",
+        "label": "Region IX"
+      },
+      {
+        "id": "r10",
+        "label": "Region X"
+      },
+      {
+        "id": "r11",
+        "label": "Region XI"
+      },
+      {
+        "id": "r12",
+        "label": "Region XII"
+      },
+      {
+        "id": "ncr",
+        "label": "NCR"
+      },
+      {
+        "id": "car",
+        "label": "CAR"
+      },
+      {
+        "id": "armm",
+        "label": "ARMM"
+      },
+      {
+        "id": "caraga",
+        "label": "CARAGA"
+      }
+    ],
+    "required": false,
+    "order": 5
+  },
+  {
+    "question_id": "q_province",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "General Information",
+    "text": "Province",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 6
+  },
+  {
+    "question_id": "q_residence_type",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "General Information",
+    "text": "Location of Residence",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "city",
+        "label": "City"
+      },
+      {
+        "id": "municipality",
+        "label": "Municipality"
+      }
+    ],
+    "required": false,
+    "order": 7
+  },
+  {
+    "question_id": "q_edu_degree_spec",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Educational Background",
+    "text": "Degree(s) and Specialization(s) — e.g. BS in Teacher Education, major in Mathematics",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 8
+  },
+  {
+    "question_id": "q_edu_university",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Educational Background",
+    "text": "College or University where degree was earned",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 9
+  },
+  {
+    "question_id": "q_edu_year_grad",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Educational Background",
+    "text": "Year Graduated",
+    "type": "number",
+    "options": null,
+    "required": false,
+    "order": 10
+  },
+  {
+    "question_id": "q_edu_honors",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Educational Background",
+    "text": "Honor(s) or Award(s) Received",
+    "type": "text",
+    "options": [
+      {
+        "id": "summa",
+        "label": "Summa Cum Laude"
+      },
+      {
+        "id": "magna",
+        "label": "Magna Cum Laude"
+      },
+      {
+        "id": "cum_laude",
+        "label": "Cum Laude"
+      },
+      {
+        "id": "with_honors",
+        "label": "With Honors"
+      },
+      {
+        "id": "deans_list",
+        "label": "Dean's List"
+      },
+      {
+        "id": "none",
+        "label": "No Academic Honors"
+      }
+    ],
+    "required": false,
+    "order": 11
+  },
+  {
+    "question_id": "q_prof_exam_name",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Educational Background",
+    "text": "Name of Professional Examination Passed — e.g. Licensure Examination for Teachers (LET)",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 12
+  },
+  {
+    "question_id": "q_prof_exam_date",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Educational Background",
+    "text": "Date Taken — e.g. March 2023",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 13
+  },
+  {
+    "question_id": "q_prof_exam_rating",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Educational Background",
+    "text": "Rating or Score — e.g. 81.25%",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 14
+  },
+  {
+    "question_id": "q_course_reason",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Educational Background",
+    "text": "What were your reason(s) for taking your course or pursuing your degree? (You may select more than one answer)",
+    "type": "multi_choice",
+    "options": [
+      {
+        "id": "high_grades",
+        "label": "High grades in related subject areas"
+      },
+      {
+        "id": "good_hs_grades",
+        "label": "Good grades in high school"
+      },
+      {
+        "id": "parent_influence",
+        "label": "Influence of parents or relatives"
+      },
+      {
+        "id": "peer_influence",
+        "label": "Peer influence"
+      },
+      {
+        "id": "role_model",
+        "label": "Inspired by a role model"
+      },
+      {
+        "id": "passion",
+        "label": "Strong passion for the profession"
+      },
+      {
+        "id": "employment",
+        "label": "Prospect for immediate employment"
+      },
+      {
+        "id": "prestige",
+        "label": "Status or prestige of the profession"
+      },
+      {
+        "id": "availability",
+        "label": "Availability of course offering in chosen institution"
+      },
+      {
+        "id": "career_advance",
+        "label": "Prospect of career advancement"
+      },
+      {
+        "id": "affordable",
+        "label": "Affordable for the family"
+      },
+      {
+        "id": "compensation",
+        "label": "Prospect of attractive compensation"
+      },
+      {
+        "id": "abroad",
+        "label": "Opportunity for employment abroad"
+      },
+      {
+        "id": "no_choice",
+        "label": "No particular choice or no better idea"
+      }
+    ],
+    "required": false,
+    "order": 15
+  },
+  {
+    "question_id": "q_training_title",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Training and Advance Studies",
+    "text": "Title of Training Program or Advance Study attended after college",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 16
+  },
+  {
+    "question_id": "q_training_duration",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Training and Advance Studies",
+    "text": "Duration and Credits Earned — e.g. 3 days, 24 hours, 3 units",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 17
+  },
+  {
+    "question_id": "q_training_institution",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Training and Advance Studies",
+    "text": "Name of Training Institution, College, or University",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 18
+  },
+  {
+    "question_id": "q_advance_reason",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Training and Advance Studies",
+    "text": "What made you pursue advance studies?",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "promotion",
+        "label": "For promotion"
+      },
+      {
+        "id": "prof_dev",
+        "label": "For professional development"
+      },
+      {
+        "id": "others",
+        "label": "Others"
+      }
+    ],
+    "required": false,
+    "order": 19
+  },
+  {
     "question_id": "q_emp_status",
-    "section": "Employment",
-    "text": "What is your current employment status?",
+    "semantic_role": "employment_status",
+    "protected": true,
+    "enabled": true,
+    "section": "Employment Data",
+    "text": "Are you presently employed?",
     "type": "single_choice",
     "options": [
       {
         "id": "employed",
-        "label": "Employed"
+        "label": "Yes — Employed"
+      },
+      {
+        "id": "unemployed",
+        "label": "No — Not Employed"
+      },
+      {
+        "id": "never_employed",
+        "label": "Never Been Employed"
+      }
+    ],
+    "required": true,
+    "order": 20
+  },
+  {
+    "question_id": "q_unemployment_reason",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Employment Data",
+    "text": "If not employed, please state your reason(s). (You may select more than one answer)",
+    "type": "multi_choice",
+    "options": [
+      {
+        "id": "further_study",
+        "label": "Advance or further study"
+      },
+      {
+        "id": "family_concern",
+        "label": "Family concern — decided not to find a job"
+      },
+      {
+        "id": "health",
+        "label": "Health-related reason(s)"
+      },
+      {
+        "id": "no_experience",
+        "label": "Lack of work experience"
+      },
+      {
+        "id": "no_opportunity",
+        "label": "No job opportunity"
+      },
+      {
+        "id": "did_not_look",
+        "label": "Did not look for a job"
+      }
+    ],
+    "required": false,
+    "order": 21
+  },
+  {
+    "question_id": "q_emp_type",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Employment Data",
+    "text": "Present Employment Status",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "regular",
+        "label": "Regular or Permanent"
+      },
+      {
+        "id": "temporary",
+        "label": "Temporary"
+      },
+      {
+        "id": "contractual",
+        "label": "Contractual"
+      },
+      {
+        "id": "casual",
+        "label": "Casual"
       },
       {
         "id": "self_employed",
         "label": "Self-employed"
-      },
-      {
-        "id": "unemployed",
-        "label": "Unemployed"
-      },
-      {
-        "id": "further_studies",
-        "label": "Pursuing Further Studies"
       }
     ],
-    "required": true,
-    "order": 1,
-    "semantic_role": "employment_status",
-    "protected": true,
-    "enabled": true
+    "required": false,
+    "order": 22
   },
   {
-    "question_id": "q_employer_name",
-    "section": "Employment",
-    "text": "Name of your employer or company:",
-    "type": "text",
-    "options": null,
-    "required": false,
-    "order": 2,
-    "semantic_role": "employer_name",
-    "protected": true,
-    "enabled": true
-  },
-  {
-    "question_id": "q_job_title",
-    "section": "Employment",
-    "text": "What is your current job title?",
-    "type": "text",
-    "options": null,
-    "required": false,
-    "order": 3,
+    "question_id": "q_occupation",
     "semantic_role": "job_title",
     "protected": true,
-    "enabled": true
-  },
-  {
-    "question_id": "q_sector",
-    "section": "Employment",
-    "text": "Which sector does your employer belong to?",
+    "enabled": true,
+    "section": "Employment Data",
+    "text": "Present Occupation (Philippine Standard Occupational Classification — PSOC 1992)",
     "type": "single_choice",
     "options": [
       {
-        "id": "private",
-        "label": "Private"
+        "id": "officials_managers",
+        "label": "Officials, Corporate Executives, Managers and Supervisors"
       },
       {
-        "id": "government",
-        "label": "Government"
+        "id": "professionals",
+        "label": "Professionals"
       },
       {
-        "id": "ngo",
-        "label": "NGO / Non-profit"
+        "id": "technicians",
+        "label": "Technicians and Associate Professionals"
       },
       {
-        "id": "self",
-        "label": "Self-employed / Freelance"
+        "id": "clerks",
+        "label": "Clerks"
+      },
+      {
+        "id": "service_workers",
+        "label": "Service Workers and Shop and Market Sales Workers"
+      },
+      {
+        "id": "farmers",
+        "label": "Farmers, Forestry Workers and Fishermen"
+      },
+      {
+        "id": "trades_workers",
+        "label": "Trades and Related Workers"
+      },
+      {
+        "id": "plant_operators",
+        "label": "Plant and Machine Operators and Assemblers"
+      },
+      {
+        "id": "laborers",
+        "label": "Laborers and Unskilled Workers"
+      },
+      {
+        "id": "special_occupation",
+        "label": "Special Occupation"
       }
     ],
     "required": false,
-    "order": 4,
-    "semantic_role": "employer_sector",
-    "protected": true,
-    "enabled": true
+    "order": 23
   },
   {
-    "question_id": "q_related",
-    "section": "Employment",
-    "text": "Is your current job related to your degree program?",
+    "question_id": "q_employer_name",
+    "semantic_role": "employer_name",
+    "protected": true,
+    "enabled": true,
+    "section": "Employment Data",
+    "text": "Name of Company or Organization (including address)",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 24
+  },
+  {
+    "question_id": "q_employer_sector",
+    "semantic_role": "employer_sector",
+    "protected": true,
+    "enabled": true,
+    "section": "Employment Data",
+    "text": "Major line of business of the company you are presently employed in:",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "agriculture",
+        "label": "Agriculture, Hunting and Forestry"
+      },
+      {
+        "id": "fishing",
+        "label": "Fishing"
+      },
+      {
+        "id": "mining",
+        "label": "Mining and Quarrying"
+      },
+      {
+        "id": "manufacturing",
+        "label": "Manufacturing"
+      },
+      {
+        "id": "utilities",
+        "label": "Electricity, Gas and Water Supply"
+      },
+      {
+        "id": "construction",
+        "label": "Construction"
+      },
+      {
+        "id": "trade",
+        "label": "Wholesale and Retail Trade"
+      },
+      {
+        "id": "hotels",
+        "label": "Hotels and Restaurants"
+      },
+      {
+        "id": "transport",
+        "label": "Transport, Storage and Communication"
+      },
+      {
+        "id": "finance",
+        "label": "Financial Intermediation"
+      },
+      {
+        "id": "real_estate",
+        "label": "Real Estate, Renting and Business Activities"
+      },
+      {
+        "id": "public_admin",
+        "label": "Public Administration and Defense"
+      },
+      {
+        "id": "education",
+        "label": "Education"
+      },
+      {
+        "id": "health",
+        "label": "Health and Social Work"
+      },
+      {
+        "id": "other_services",
+        "label": "Other Community, Social and Personal Services"
+      },
+      {
+        "id": "private_household",
+        "label": "Private Households with Employed Persons"
+      },
+      {
+        "id": "international",
+        "label": "Extra-territorial Organizations and Bodies"
+      }
+    ],
+    "required": false,
+    "order": 25
+  },
+  {
+    "question_id": "q_work_location",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Employment Data",
+    "text": "Place of work",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "local",
+        "label": "Local"
+      },
+      {
+        "id": "abroad",
+        "label": "Abroad"
+      }
+    ],
+    "required": false,
+    "order": 26
+  },
+  {
+    "question_id": "q_is_first_job",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "First Job",
+    "text": "Is this your first job after college?",
     "type": "single_choice",
     "options": [
       {
@@ -94,58 +704,418 @@
       {
         "id": "no",
         "label": "No"
-      },
-      {
-        "id": "partially",
-        "label": "Partially"
       }
     ],
     "required": false,
-    "order": 5,
+    "order": 27
+  },
+  {
+    "question_id": "q_stay_reason",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "First Job",
+    "text": "What are your reason(s) for staying on the job? (You may select more than one answer)",
+    "type": "multi_choice",
+    "options": [
+      {
+        "id": "salary",
+        "label": "Salaries and benefits"
+      },
+      {
+        "id": "career",
+        "label": "Career challenge"
+      },
+      {
+        "id": "special_skill",
+        "label": "Related to special skill"
+      },
+      {
+        "id": "course_related",
+        "label": "Related to course or program of study"
+      },
+      {
+        "id": "proximity",
+        "label": "Proximity to residence"
+      },
+      {
+        "id": "peer",
+        "label": "Peer influence"
+      },
+      {
+        "id": "family",
+        "label": "Family influence"
+      }
+    ],
+    "required": false,
+    "order": 28
+  },
+  {
+    "question_id": "q_first_job_related",
     "semantic_role": "course_relevance",
     "protected": true,
-    "enabled": true
+    "enabled": true,
+    "section": "First Job",
+    "text": "Is your first job related to the course you took up in college?",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "yes",
+        "label": "Yes"
+      },
+      {
+        "id": "no",
+        "label": "No"
+      }
+    ],
+    "required": false,
+    "order": 29
   },
   {
-    "question_id": "q_months_to_job",
-    "section": "Employment",
-    "text": "How many months after graduation did you find your first job?",
-    "type": "number",
-    "options": null,
-    "required": false,
-    "order": 6,
-    "semantic_role": "months_to_employment",
+    "question_id": "q_accept_reason",
+    "semantic_role": null,
     "protected": false,
-    "enabled": true
+    "enabled": true,
+    "section": "First Job",
+    "text": "If not related to your course, what were your reasons for accepting the job? (You may select more than one answer)",
+    "type": "multi_choice",
+    "options": [
+      {
+        "id": "salary",
+        "label": "Salaries and benefits"
+      },
+      {
+        "id": "career",
+        "label": "Career challenge"
+      },
+      {
+        "id": "special_skill",
+        "label": "Related to special skills"
+      },
+      {
+        "id": "proximity",
+        "label": "Proximity to residence"
+      }
+    ],
+    "required": false,
+    "order": 30
   },
   {
-    "question_id": "q_job_desc",
-    "section": "Skills",
-    "text": "Briefly describe your main duties and responsibilities:",
-    "type": "text",
-    "options": null,
+    "question_id": "q_change_reason",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "First Job",
+    "text": "What were your reason(s) for changing job? (You may select more than one answer)",
+    "type": "multi_choice",
+    "options": [
+      {
+        "id": "salary",
+        "label": "Salaries and benefits"
+      },
+      {
+        "id": "career",
+        "label": "Career challenge"
+      },
+      {
+        "id": "special_skill",
+        "label": "Related to special skills"
+      },
+      {
+        "id": "proximity",
+        "label": "Proximity to residence"
+      }
+    ],
     "required": false,
-    "order": 7,
-    "semantic_role": "job_description",
+    "order": 31
+  },
+  {
+    "question_id": "q_first_job_duration",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "First Job",
+    "text": "How long did you stay in your first job?",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "lt_1m",
+        "label": "Less than a month"
+      },
+      {
+        "id": "1_6m",
+        "label": "1 to 6 months"
+      },
+      {
+        "id": "7_11m",
+        "label": "7 to 11 months"
+      },
+      {
+        "id": "1_2y",
+        "label": "1 year to less than 2 years"
+      },
+      {
+        "id": "2_3y",
+        "label": "2 years to less than 3 years"
+      },
+      {
+        "id": "3_4y",
+        "label": "3 years to less than 4 years"
+      }
+    ],
+    "required": false,
+    "order": 32
+  },
+  {
+    "question_id": "q_job_search_method",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "First Job",
+    "text": "How did you find your first job? (You may select more than one answer)",
+    "type": "multi_choice",
+    "options": [
+      {
+        "id": "advertisement",
+        "label": "Response to an advertisement"
+      },
+      {
+        "id": "walk_in",
+        "label": "As walk-in applicant"
+      },
+      {
+        "id": "referral",
+        "label": "Recommended by someone"
+      },
+      {
+        "id": "friends",
+        "label": "Information from friends"
+      },
+      {
+        "id": "placement",
+        "label": "Arranged by school's job placement officer"
+      },
+      {
+        "id": "family_biz",
+        "label": "Family business"
+      },
+      {
+        "id": "job_fair",
+        "label": "Job Fair or Public Employment Service Office (PESO)"
+      }
+    ],
+    "required": false,
+    "order": 33
+  },
+  {
+    "question_id": "q_time_to_job",
+    "semantic_role": "months_to_employment",
     "protected": true,
-    "enabled": true
+    "enabled": true,
+    "section": "First Job",
+    "text": "How long did it take you to land your first job after graduation?",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "lt_1m",
+        "label": "Less than a month"
+      },
+      {
+        "id": "1_6m",
+        "label": "1 to 6 months"
+      },
+      {
+        "id": "7_11m",
+        "label": "7 to 11 months"
+      },
+      {
+        "id": "1_2y",
+        "label": "1 year to less than 2 years"
+      },
+      {
+        "id": "2_3y",
+        "label": "2 years to less than 3 years"
+      },
+      {
+        "id": "3_4y",
+        "label": "3 years to less than 4 years"
+      }
+    ],
+    "required": false,
+    "order": 34
   },
   {
-    "question_id": "q_skills_used",
-    "section": "Skills",
-    "text": "What skills do you use most in your current job?",
-    "type": "text",
-    "options": null,
+    "question_id": "q_job_level_first",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "First Job",
+    "text": "Job Level Position — First Job",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "rank_clerical",
+        "label": "Rank or Clerical"
+      },
+      {
+        "id": "professional",
+        "label": "Professional, Technical or Supervisory"
+      },
+      {
+        "id": "managerial",
+        "label": "Managerial or Executive"
+      },
+      {
+        "id": "self_employed",
+        "label": "Self-employed"
+      }
+    ],
     "required": false,
-    "order": 8,
+    "order": 35
+  },
+  {
+    "question_id": "q_job_level",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "First Job",
+    "text": "Job Level Position — Current or Present Job",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "rank_clerical",
+        "label": "Rank or Clerical"
+      },
+      {
+        "id": "professional",
+        "label": "Professional, Technical or Supervisory"
+      },
+      {
+        "id": "managerial",
+        "label": "Managerial or Executive"
+      },
+      {
+        "id": "self_employed",
+        "label": "Self-employed"
+      }
+    ],
+    "required": false,
+    "order": 36
+  },
+  {
+    "question_id": "q_monthly_income",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "First Job",
+    "text": "What was your initial gross monthly earning in your first job after college?",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "below_5k",
+        "label": "Below ₱5,000"
+      },
+      {
+        "id": "5k_10k",
+        "label": "₱5,000 to less than ₱10,000"
+      },
+      {
+        "id": "10k_15k",
+        "label": "₱10,000 to less than ₱15,000"
+      },
+      {
+        "id": "15k_20k",
+        "label": "₱15,000 to less than ₱20,000"
+      },
+      {
+        "id": "20k_25k",
+        "label": "₱20,000 to less than ₱25,000"
+      },
+      {
+        "id": "above_25k",
+        "label": "₱25,000 and above"
+      }
+    ],
+    "required": false,
+    "order": 37
+  },
+  {
+    "question_id": "q_curriculum_relevant",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Curriculum Assessment",
+    "text": "Was the curriculum you had in college relevant to your first job?",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "yes",
+        "label": "Yes"
+      },
+      {
+        "id": "no",
+        "label": "No"
+      }
+    ],
+    "required": false,
+    "order": 38
+  },
+  {
+    "question_id": "q_competencies",
     "semantic_role": "skills_free_text",
     "protected": true,
-    "enabled": true
+    "enabled": true,
+    "section": "Curriculum Assessment",
+    "text": "What competencies learned in college did you find very useful in your job? (You may select more than one answer)",
+    "type": "multi_choice",
+    "options": [
+      {
+        "id": "communication",
+        "label": "Communication skills"
+      },
+      {
+        "id": "human_relations",
+        "label": "Human relations skills"
+      },
+      {
+        "id": "entrepreneurial",
+        "label": "Entrepreneurial skills"
+      },
+      {
+        "id": "it_skills",
+        "label": "Information Technology skills"
+      },
+      {
+        "id": "problem_solving",
+        "label": "Problem-solving skills"
+      },
+      {
+        "id": "critical_thinking",
+        "label": "Critical thinking skills"
+      }
+    ],
+    "required": false,
+    "order": 39
+  },
+  {
+    "question_id": "q_curriculum_suggest",
+    "semantic_role": "job_description",
+    "protected": true,
+    "enabled": true,
+    "section": "Curriculum Assessment",
+    "text": "Please list down suggestions to further improve your course curriculum:",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 40
   },
   {
     "question_id": "q_satisfaction",
+    "semantic_role": "satisfaction_rating",
+    "protected": false,
+    "enabled": true,
     "section": "Satisfaction",
-    "text": "How satisfied are you with your current job? (1 = Very dissatisfied, 5 = Very satisfied)",
+    "text": "How satisfied are you with your current job? (1 = Very Dissatisfied, 5 = Very Satisfied)",
     "type": "scale",
     "options": [
       {
@@ -170,13 +1140,13 @@
       }
     ],
     "required": false,
-    "order": 9,
-    "semantic_role": "satisfaction_rating",
-    "protected": false,
-    "enabled": true
+    "order": 41
   },
   {
-    "question_id": "q_curriculum",
+    "question_id": "q_curriculum_rating",
+    "semantic_role": "curriculum_rating",
+    "protected": false,
+    "enabled": true,
     "section": "Satisfaction",
     "text": "How well did your degree curriculum prepare you for the workforce? (1 = Not at all, 5 = Very well)",
     "type": "scale",
@@ -203,9 +1173,6 @@
       }
     ],
     "required": false,
-    "order": 10,
-    "semantic_role": "curriculum_rating",
-    "protected": false,
-    "enabled": true
+    "order": 42
   }
 ]

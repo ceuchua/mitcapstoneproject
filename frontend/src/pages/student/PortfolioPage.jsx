@@ -6,7 +6,6 @@ import { T } from "../../tokens";
 import { SkillPillGroup, Spinner } from "../../components/UI";
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip,
-  BarChart, Bar, XAxis, YAxis, Cell,
 } from "recharts";
 
 const TOPIC_COLORS = [
@@ -14,8 +13,67 @@ const TOPIC_COLORS = [
   "#E07B39", "#2D7A4F", "#B07D1A", "#B53A2F", "#555",
 ];
 
+// ── Job role suggestions per LDA topic label (non-clickable, visual only) ──
+// Keys match the exact topic_labels strings from lda_model.joblib.
+const JOB_SUGGESTIONS = {
+  "Healthcare and Medical": [
+    { title: "Registered Nurse",         desc: "Patient care, clinical documentation, health assessment" },
+    { title: "Medical Technologist",      desc: "Laboratory analysis, diagnostic testing, specimen processing" },
+    { title: "Physical Therapist",        desc: "Rehabilitation programs, patient recovery, therapeutic exercises" },
+    { title: "Health Information Manager",desc: "Medical records, health data management, compliance" },
+    { title: "Pharmacist",                desc: "Drug dispensing, patient counseling, medication management" },
+  ],
+  "Business Governance": [
+    { title: "Compliance Officer",  desc: "Regulatory compliance, policy implementation, risk monitoring" },
+    { title: "Internal Auditor",    desc: "Financial audits, process review, risk assessment" },
+    { title: "Corporate Secretary", desc: "Board governance, legal compliance, corporate records" },
+    { title: "Operations Manager",  desc: "Business operations, process improvement, team supervision" },
+    { title: "Management Analyst",  desc: "Organizational efficiency, workflow optimization, reporting" },
+  ],
+  "Information Technology": [
+    { title: "Software Developer",    desc: "Application development, coding, system design" },
+    { title: "IT Support Specialist", desc: "Technical troubleshooting, hardware/software support, helpdesk" },
+    { title: "Network Administrator", desc: "Network infrastructure, server management, cybersecurity" },
+    { title: "Systems Analyst",       desc: "Requirements analysis, system design, process documentation" },
+    { title: "Web Developer",         desc: "Frontend/backend development, UI design, database integration" },
+  ],
+  "Business Development": [
+    { title: "Sales Representative", desc: "Client acquisition, product pitching, revenue generation" },
+    { title: "Marketing Specialist", desc: "Campaign management, brand promotion, market research" },
+    { title: "Business Analyst",     desc: "Market analysis, strategic planning, process improvement" },
+    { title: "Account Manager",      desc: "Client relationship management, retention, upselling" },
+    { title: "Entrepreneur / MSME",  desc: "Business ownership, product/service development, operations" },
+  ],
+  "Engineering and Manufacturing": [
+    { title: "Civil Engineer",             desc: "Infrastructure design, construction management, project supervision" },
+    { title: "Electrical Engineer",        desc: "Electrical systems, power distribution, equipment maintenance" },
+    { title: "Mechanical Engineer",        desc: "Machine design, manufacturing processes, product development" },
+    { title: "Quality Assurance Engineer", desc: "Product testing, quality standards, process validation" },
+    { title: "Industrial Engineer",        desc: "Process optimization, production planning, efficiency improvement" },
+  ],
+  "Education": [
+    { title: "Elementary / HS Teacher",desc: "Classroom instruction, curriculum delivery, student assessment" },
+    { title: "College Instructor",      desc: "Higher education teaching, course facilitation, research" },
+    { title: "Curriculum Developer",    desc: "Learning material design, instructional design, program planning" },
+    { title: "Education Administrator", desc: "School management, policy implementation, staff supervision" },
+    { title: "Guidance Counselor",      desc: "Student support, career guidance, psychosocial services" },
+  ],
+  "Data Analytics and Marketing": [
+    { title: "Data Analyst",                 desc: "Data cleaning, visualization, statistical analysis, reporting" },
+    { title: "Digital Marketing Specialist", desc: "SEO/SEM, social media management, content strategy" },
+    { title: "Business Intelligence Analyst",desc: "Dashboard development, KPI tracking, data-driven insights" },
+    { title: "Market Research Analyst",      desc: "Consumer insights, survey design, competitive analysis" },
+    { title: "Data Science Associate",        desc: "Machine learning, predictive modeling, data pipeline" },
+  ],
+};
+
 function shortLabel(label) {
   return label.split(" & ")[0].trim().split(" ").slice(0, 2).join(" ");
+}
+
+// Returns a Google search URL for a skill term
+function googleSkillUrl(skill) {
+  return `https://www.google.com/search?q=${encodeURIComponent(skill + " skill")}`;
 }
 
 export default function PortfolioPage({ user }) {
@@ -55,7 +113,6 @@ export default function PortfolioPage({ user }) {
         major:                p.major                || "",
         skills_self_reported: p.skills_self_reported || [],
       });
-      // fire both requests in parallel — neither blocks the other
       fetchRecs(p.program, p.major || "");
     } catch (e) {
       setErr("Could not load profile: " + e.message);
@@ -103,17 +160,19 @@ export default function PortfolioPage({ user }) {
     setForm(f => ({ ...f, skills_self_reported: f.skills_self_reported.filter(x => x !== s) }));
   }
 
-  // Chart data — computed only when recs exists
-  const barData = recs
-    ? [...(recs.skill_topics || [])]
-        .sort((a, b) => b.score - a.score)
-        .map(t => ({ label: shortLabel(t.label), score: Math.round(t.score * 100), full: t.label }))
-    : [];
-
   const radarData = recs
     ? (recs.skill_topics || [])
         .filter(t => t.score > 0.01)
         .map(t => ({ topic: shortLabel(t.label), score: Math.round(t.score * 100), full: t.label }))
+    : [];
+
+  // Build job suggestions from the top 2 scoring topics
+  const topJobSuggestions = recs
+    ? [...(recs.skill_topics || [])]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 2)
+        .flatMap(t => (JOB_SUGGESTIONS[t.label] || []).map(j => ({ ...j, domain: t.label })))
+        .slice(0, 6)
     : [];
 
   if (!profile) return (
@@ -141,7 +200,7 @@ export default function PortfolioPage({ user }) {
 
       <div className="grid-2 section" style={{ alignItems: "start" }}>
 
-        {/* ── LEFT: Profile + Alignment ── */}
+        {/* ── LEFT: Profile ── */}
         <div>
           <div className="card section">
             {editing ? (
@@ -188,37 +247,39 @@ export default function PortfolioPage({ user }) {
                   Professional
                 </div>
                 <div className="form-row">
-                  <div className="form-group"><label className="form-label">Job Title</label>
-                    <input className="form-input" value={form.current_job}
-                      onChange={e => setForm(f => ({...f, current_job: e.target.value}))} /></div>
-                  <div className="form-group"><label className="form-label">Employer</label>
-                    <input className="form-input" value={form.current_employer}
-                      onChange={e => setForm(f => ({...f, current_employer: e.target.value}))} /></div>
+                  <div className="form-group"><label className="form-label">Current Job Title</label>
+                    <input className="form-input" placeholder="e.g. Software Engineer"
+                      value={form.current_job} onChange={e => setForm(f => ({...f, current_job: e.target.value}))} /></div>
+                  <div className="form-group"><label className="form-label">Current Employer</label>
+                    <input className="form-input" placeholder="Company or organization"
+                      value={form.current_employer} onChange={e => setForm(f => ({...f, current_employer: e.target.value}))} /></div>
                 </div>
                 <div className="form-row">
                   <div className="form-group"><label className="form-label">LinkedIn URL</label>
                     <input className="form-input" placeholder="https://linkedin.com/in/…"
-                      value={form.linkedin_url}
-                      onChange={e => setForm(f => ({...f, linkedin_url: e.target.value}))} /></div>
-                  <div className="form-group"><label className="form-label">Contact</label>
-                    <input className="form-input" value={form.contact_number}
-                      onChange={e => setForm(f => ({...f, contact_number: e.target.value}))} /></div>
+                      value={form.linkedin_url} onChange={e => setForm(f => ({...f, linkedin_url: e.target.value}))} /></div>
+                  <div className="form-group"><label className="form-label">Contact Number</label>
+                    <input className="form-input" placeholder="+63…"
+                      value={form.contact_number} onChange={e => setForm(f => ({...f, contact_number: e.target.value}))} /></div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">My Skills</label>
-                  <div style={{ display:"flex", gap:8, marginBottom:8 }}>
-                    <input className="form-input" style={{ flex:1 }} placeholder="Add a skill…"
-                      value={newSkill} onChange={e => setNewSkill(e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && addSkill()} />
-                    <button className="btn btn-secondary btn-sm" onClick={addSkill}>Add</button>
-                  </div>
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                    {form.skills_self_reported.map(s => (
-                      <span key={s} className="pill pill-match" style={{ cursor:"pointer" }}
-                        onClick={() => removeSkill(s)}>{s} ✕</span>
-                    ))}
-                  </div>
+                <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:"uppercase",
+                  letterSpacing:".8px", margin:"6px 0 10px", paddingBottom:6, borderBottom:`1px solid ${T.border}` }}>
+                  My Skills
+                </div>
+                <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+                  <input className="form-input" placeholder="Add a skill…"
+                    value={newSkill} onChange={e => setNewSkill(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && addSkill()} style={{ flex:1 }} />
+                  <button className="btn btn-secondary btn-sm" onClick={addSkill}>Add</button>
+                </div>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:16 }}>
+                  {form.skills_self_reported.map(s => (
+                    <span key={s} className="pill pill-match" style={{ cursor:"pointer" }}
+                      onClick={() => removeSkill(s)} title="Click to remove">
+                      ✓ {s} ✕
+                    </span>
+                  ))}
                 </div>
 
                 <button className="btn btn-primary" onClick={saveProfile} disabled={busy}>
@@ -227,59 +288,40 @@ export default function PortfolioPage({ user }) {
               </>
             ) : (
               <>
-                <div style={{ display:"flex", gap:16, alignItems:"flex-start", marginBottom:20 }}>
-                  <div style={{
-                    width:64, height:64, borderRadius:"50%", background:T.accentSoft,
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    fontSize:24, fontFamily:"'DM Serif Display',serif",
-                    color:T.accent, flexShrink:0,
-                  }}>
-                    {profile.first_name?.[0]}{profile.last_name?.[0]}
-                  </div>
-                  <div>
-                    <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:20 }}>
-                      {profile.first_name} {profile.last_name}
-                    </div>
-                    {profile.current_job && (
-                      <div style={{ fontSize:13, color:T.inkMuted, marginTop:2 }}>
-                        {profile.current_job}{profile.current_employer ? ` · ${profile.current_employer}` : ""}
-                      </div>
-                    )}
-                    <div style={{ fontSize:12, color:T.inkMuted, marginTop:4 }}>{profile.email}</div>
-                  </div>
+                <div className="card-title">
+                  {profile.first_name} {profile.last_name}
                 </div>
-
                 {profile.bio && (
-                  <p style={{ fontSize:13, color:T.inkMuted, lineHeight:1.7, marginBottom:16 }}>{profile.bio}</p>
+                  <p style={{ fontSize:13, color:T.inkMuted, marginBottom:14, lineHeight:1.6 }}>
+                    {profile.bio}
+                  </p>
                 )}
-
-                <hr className="divider" />
-
-                <div style={{ display:"flex", flexDirection:"column", gap:8, fontSize:13 }}>
-                  {[
-                    { label:"Program",               value: profile.program },
-                    { label:"Major / Specialization", value: profile.major },
-                    { label:"Graduation Year",        value: profile.graduation_year },
-                    { label:"Student ID",             value: profile.student_id },
-                    { label:"Contact",                value: profile.contact_number },
-                    { label:"LinkedIn",               value: profile.linkedin_url, link: true },
-                  ].filter(r => r.value).map(r => (
-                    <div key={r.label} style={{ display:"flex", justifyContent:"space-between", gap:8 }}>
-                      <span style={{ color:T.inkMuted, flexShrink:0 }}>{r.label}</span>
-                      {r.link
-                        ? <a href={r.value} target="_blank" rel="noreferrer"
-                            style={{ color:T.accent, wordBreak:"break-all" }}>{r.value}</a>
-                        : <span style={{ fontWeight:500 }}>{r.value}</span>
-                      }
-                    </div>
-                  ))}
-                </div>
-
-                {profile.skills_self_reported?.length > 0 && (
+                {[
+                  { label:"Program",  value: profile.program },
+                  { label:"Major",    value: profile.major },
+                  { label:"Job",      value: profile.current_job },
+                  { label:"Employer", value: profile.current_employer },
+                  { label:"Contact",  value: profile.contact_number },
+                ].filter(r => r.value).map(r => (
+                  <div key={r.label} style={{ display:"flex", gap:10, fontSize:13,
+                    marginBottom:6, color:T.ink }}>
+                    <span style={{ color:T.inkMuted, minWidth:70 }}>{r.label}</span>
+                    <span>{r.value}</span>
+                  </div>
+                ))}
+                {profile.linkedin_url && (
+                  <div style={{ marginTop:8 }}>
+                    <a href={profile.linkedin_url} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize:13, color:T.accent }}>
+                      LinkedIn Profile →
+                    </a>
+                  </div>
+                )}
+                {(profile.skills_self_reported || []).length > 0 && (
                   <>
-                    <hr className="divider" />
-                    <div className="form-label" style={{ marginBottom:8 }}>My Skills</div>
-                    <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:"uppercase",
+                      letterSpacing:".8px", margin:"16px 0 8px" }}>My Skills</div>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
                       {profile.skills_self_reported.map(s => (
                         <span key={s} className="pill pill-match">{s}</span>
                       ))}
@@ -290,7 +332,35 @@ export default function PortfolioPage({ user }) {
             )}
           </div>
 
-
+          {/* ── Job Role Suggestions — below profile card ── */}
+          {topJobSuggestions.length > 0 && (
+            <div className="card" style={{ marginTop:20 }}>
+              <div className="card-title" style={{ marginBottom:6 }}>Possible Career Paths</div>
+              <p style={{ fontSize:12, color:T.inkMuted, marginBottom:14, lineHeight:1.6 }}>
+                Based on your identified skill domains. These are suggested roles only — not job listings.
+              </p>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                {topJobSuggestions.map((job, i) => (
+                  <div key={i} style={{
+                    background:T.bg, border:`1px solid ${T.border}`,
+                    borderRadius:8, padding:"10px 12px",
+                  }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:T.ink, marginBottom:3 }}>
+                      {job.title}
+                    </div>
+                    <div style={{ fontSize:11, color:T.inkMuted, lineHeight:1.5 }}>
+                      {job.desc}
+                    </div>
+                    <div style={{ marginTop:5 }}>
+                      <span className="pill pill-neutral" style={{ fontSize:10 }}>
+                        {job.domain.split(" ")[0]}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── RIGHT: LDA Recommendations ── */}
@@ -298,149 +368,35 @@ export default function PortfolioPage({ user }) {
           <div className="card">
             <div className="card-title">Skill Recommendations</div>
             <p style={{ fontSize:13, color:T.inkMuted, marginBottom:16, lineHeight:1.6 }}>
-              Based on your college program <strong>{profile.program || "degree"}</strong>
+              Based on your <strong>{profile.program || "degree"}</strong>
               {profile.major && <> — <strong>{profile.major}</strong></>}
-              , here are the identified relevant skill domains.
+              , the LDA model identifies the most relevant skill domains.
             </p>
 
-            {/* ── Loading ── */}
             {loadingRecs && (
               <div style={{ textAlign:"center", padding:40 }}>
                 <Spinner dark />
-                <div style={{ marginTop:12, color:T.inkMuted, fontSize:13 }}>
-                  Analyzing your program…
-                </div>
+                <div style={{ marginTop:12, color:T.inkMuted, fontSize:13 }}>Analyzing your program…</div>
               </div>
             )}
 
-            {/* ── Error ── */}
             {!loadingRecs && recsError && (
-              <div className="alert alert-error">
-                Could not load recommendations: {recsError}
-              </div>
+              <div className="alert alert-error">Could not load recommendations: {recsError}</div>
             )}
 
-            {/* ── No program set ── */}
             {!loadingRecs && !recsError && !recs && (
               <div className="empty">
-                <div className="empty-icon"></div>
+                <div className="empty-icon">🎓</div>
                 <div>Set your degree program in your profile to get recommendations.</div>
               </div>
             )}
 
-            {/* ── Charts + content ── */}
             {!loadingRecs && recs && (
               <>
-                {/* Bar chart — explicit fixed dimensions, no ResponsiveContainer */}
-                {barData.length > 0 && (
-                  <div style={{ marginBottom:24 }}>
-                    <div className="form-label" style={{ marginBottom:10 }}>
-                      Skill Domain Profile
-                    </div>
-                    <BarChart
-                      width={380}
-                      height={barData.length * 42 + 40}
-                      data={barData}
-                      layout="vertical"
-                      margin={{ top:4, right:32, bottom:4, left:4 }}
-                    >
-                      <XAxis type="number" domain={[0, 100]}
-                        tickFormatter={v => v + "%"} tick={{ fontSize:11 }} />
-                      <YAxis type="category" dataKey="label"
-                        width={125} tick={{ fontSize:11 }} />
-                      <Tooltip
-                        formatter={v => [`${v}%`, "Relevance"]}
-                        labelFormatter={(_, p) => p?.[0]?.payload?.full || ""}
-                      />
-                      <Bar dataKey="score" radius={[0,4,4,0]} maxBarSize={22}>
-                        {barData.map((_, i) => (
-                          <Cell key={i} fill={TOPIC_COLORS[i % TOPIC_COLORS.length]} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </div>
-                )}
-
-                {/* Radar chart — explicit fixed dimensions, no ResponsiveContainer */}
-                {radarData.length >= 3 && (
-                  <div style={{ marginBottom:24 }}>
-                    <div className="form-label" style={{ marginBottom:10 }}>
-                      Domain Radar
-                    </div>
-                    <RadarChart
-                      width={380}
-                      height={280}
-                      data={radarData}
-                    >
-                      <PolarGrid stroke={T.border} />
-                      <PolarAngleAxis
-                        dataKey="topic"
-                        tick={{ fontSize:11, fill:T.inkMuted }}
-                      />
-                      <PolarRadiusAxis
-                        angle={30}
-                        domain={[0, 100]}
-                        tick={{ fontSize:9, fill:T.inkMuted }}
-                        tickFormatter={v => v + "%"}
-                      />
-                      <Radar
-                        name="Relevance"
-                        dataKey="score"
-                        fill={T.accent}
-                        fillOpacity={0.25}
-                        stroke={T.accent}
-                        strokeWidth={2}
-                        dot={{ fill:T.accent, r:4 }}
-                      />
-                      <Tooltip
-                        formatter={v => [`${v}%`, "Relevance"]}
-                        labelFormatter={(_, p) => p?.[0]?.payload?.full || ""}
-                      />
-                    </RadarChart>
-                  </div>
-                )}
-
-                {/* Categorized skill recommendations */}
-                <div className="form-label" style={{ marginBottom:10 }}>
-                  Recommended Skills
+                {/* Topic keyword cards */}
+                <div className="form-label" style={{ marginBottom:8, marginTop:20 }}>
+                  Top Skill Domains
                 </div>
-                {(() => {
-                  const owned = new Set((profile.skills_self_reported || []).map(x => x.toLowerCase()));
-                  const tagged = recs.tagged_skills || (recs.recommended_skills || []).map(s => ({ skill: s, category: "domain" }));
-                  const groups = { technical: [], tool: [], soft: [], domain: [] };
-                  tagged.forEach(t => (groups[t.category] || groups.domain).push(t.skill));
-                  const CAT_CONFIG = {
-                    technical: { label: "Technical Skills", pill: "pill-topic" },
-                    tool:      { label: "Tools & Platforms", pill: "pill-surplus" },
-                    soft:      { label: "Soft Skills",      pill: "pill-match" },
-                    domain:    { label: "Domain Knowledge", pill: "pill-neutral" },
-                  };
-                  return Object.entries(CAT_CONFIG)
-                    .filter(([cat]) => groups[cat]?.length > 0)
-                    .map(([cat, cfg]) => (
-                      <div key={cat} style={{ marginBottom:14 }}>
-                        <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted,
-                          textTransform:"uppercase", letterSpacing:".6px", marginBottom:6 }}>
-                          {cfg.label}
-                        </div>
-                        <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
-                          {groups[cat].map(s => {
-                            const isOwned = owned.has(s.toLowerCase());
-                            return (
-                              <span key={s}
-                                className={`pill ${isOwned ? "pill-match" : cfg.pill}`}
-                                title={isOwned ? "You already have this skill" : "Recommended to develop"}>
-                                {isOwned ? "✓ " : ""}{s}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ));
-                })()}
-
-                {/* Topic cards */}
-                <div className="form-label" style={{ marginBottom:8 }}>Top Skill Domains</div>
                 {(recs.skill_topics || []).map((t, i) => (
                   <div key={t.topic_id} style={{
                     marginBottom:10, background:T.bg, borderRadius:8,
@@ -462,11 +418,79 @@ export default function PortfolioPage({ user }) {
                     </div>
                   </div>
                 ))}
+
+                {/* ── Recommended Skills — technical & tool are clickable ── */}
+                <div className="form-label" style={{ marginBottom:10 }}>Recommended Skills</div>
+                <p style={{ fontSize:11, color:T.inkMuted, marginBottom:10 }}>
+                  💡 Click on <strong>Technical</strong> or <strong>Tool</strong> skills to search and learn more.
+                </p>
+                {(() => {
+                  const owned  = new Set((profile.skills_self_reported || []).map(x => x.toLowerCase()));
+                  const tagged = recs.tagged_skills || (recs.recommended_skills || []).map(s => ({ skill: s, category: "domain" }));
+                  const groups = { technical: [], tool: [], soft: [], domain: [] };
+                  tagged.forEach(t => (groups[t.category] || groups.domain).push(t.skill));
+
+                  const CAT_CONFIG = {
+                    technical: { label: "⚙ Technical Skills",  pill: "pill-topic",   clickable: true  },
+                    tool:      { label: "🛠 Tools & Platforms", pill: "pill-surplus", clickable: true  },
+                    soft:      { label: "💬 Soft Skills",       pill: "pill-match",   clickable: false },
+                    domain:    { label: "📚 Domain Knowledge",  pill: "pill-neutral", clickable: false },
+                  };
+
+                  return Object.entries(CAT_CONFIG)
+                    .filter(([cat]) => groups[cat]?.length > 0)
+                    .map(([cat, cfg]) => (
+                      <div key={cat} style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted,
+                          textTransform:"uppercase", letterSpacing:".6px", marginBottom:6 }}>
+                          {cfg.label}
+                        </div>
+                        <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+                          {groups[cat].map(s => {
+                            const isOwned = owned.has(s.toLowerCase());
+                            const pillClass = `pill ${isOwned ? "pill-match" : cfg.pill}`;
+                            const label = `${isOwned ? "✓ " : ""}${s}`;
+
+                            if (cfg.clickable) {
+                              return (
+                                <a key={s}
+                                  href={googleSkillUrl(s)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={pillClass}
+                                  title={isOwned
+                                    ? `You have this skill — search "${s}"`
+                                    : `Learn about "${s}" — opens Google`}
+                                  style={{
+                                    textDecoration: "none",
+                                    cursor: "pointer",
+                                    transition: "opacity .15s",
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.opacity = ".75"}
+                                  onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
+                                  {label} 🔍
+                                </a>
+                              );
+                            }
+
+                            return (
+                              <span key={s}
+                                className={pillClass}
+                                title={isOwned ? "You already have this skill" : "Recommended to develop"}>
+                                {label}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                })()}
+
+                
               </>
             )}
           </div>
         </div>
-
       </div>
     </div>
   );

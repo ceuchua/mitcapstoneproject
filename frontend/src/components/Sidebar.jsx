@@ -44,7 +44,7 @@ const css = `
   .sidebar-logo span { color: ${T.accent}; }
   .sidebar-role {
     font-size: 10px; font-weight: 700; letter-spacing: 1px;
-    text-transform: uppercase; color: ${T.accent};
+    text-transform: uppercase; color: #fff;
     padding: 0 22px; margin-bottom: 8px;
   }
   .sidebar-role.super { color: #f0c040; }
@@ -54,15 +54,17 @@ const css = `
     font-size: 13px; font-weight: 500; transition: all .15s;
     border-left: 3px solid transparent; user-select: none;
   }
-  .nav-item:hover { color: #fff; background: rgba(255,255,255,0.06); }
-  .nav-item.active { color: #fff; border-left-color: ${T.accent}; background: rgba(200,82,10,0.12); }
-  .nav-item.super-active { color: #fff; border-left-color: #f0c040; background: rgba(240,192,64,0.12); }
+  .nav-item:hover { color: #fff; background: #0000; }
+  .nav-item.active { color: #fff; border-left-color: ${T.accentSoft}; background: #0000; }
+  .nav-item.super-active { color: #fff; border-left-color: #fff; background: rgba(240,192,64,0.12); }
   .nav-icon { font-size: 16px; width: 20px; text-align: center; }
   .nav-divider { border-top: 1px solid rgba(255,255,255,0.08); margin: 8px 22px; }
   .sidebar-footer { margin-top: auto; padding: 20px 22px 0; border-top: 1px solid rgba(255,255,255,0.08); }
   .sidebar-user { color: rgba(255,255,255,.7); font-size: 12px; margin-bottom: 10px; }
   .sidebar-user strong { display: block; color: #fff; font-size: 13px; margin-bottom: 2px; }
   .status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .btn-signout { background: transparent; color: rgba(255,255,255,.5); border: 1px solid rgba(255,255,255,0.08); }
+  .btn-signout:hover { background: transparent; color: ${T.bg}; border: 1px solid ${T.bg}; }
 `;
 
 export default function Sidebar({ page, setPage, user, healthy, onLogout }) {
@@ -79,7 +81,7 @@ export default function Sidebar({ page, setPage, user, healthy, onLogout }) {
       <style>{css}</style>
       <nav className="sidebar">
         <div className="sidebar-logo">
-          Graduate<br /><span>Tracer</span><br />System
+          Graduate<br />Tracer<br />System
         </div>
 
         <div className={`sidebar-role ${isSuperAdmin ? "super" : ""}`}>
@@ -103,12 +105,12 @@ export default function Sidebar({ page, setPage, user, healthy, onLogout }) {
             <strong>{user?.first_name} {user?.last_name}</strong>
             {user?.email}
           </div>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "#fff", marginBottom: 10 }}>
             <span className="status-dot" style={{ background: healthy ? "#3ecf6b" : "#e05a5a" }} />
             {healthy ? "API Connected" : "API Offline"}
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={onLogout}
-            style={{ color: "rgba(255,255,255,.5)", borderColor: "rgba(255,255,255,.15)", width: "100%" }}>
+          <button className="btn btn-signout btn-sm" onClick={onLogout}
+            style={{width: "100%" }}>
             Sign Out
           </button>
         </div>
