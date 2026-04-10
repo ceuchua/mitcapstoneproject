@@ -1,6 +1,6 @@
 // api.js — centralized API helpers with global 401 interception
 
-const BASE = "http://localhost:8000";
+const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 // ── Global unauthorized handler ───────────────────────────────────────────────
 // Registered by App.jsx on mount. Fires when any authenticated request
