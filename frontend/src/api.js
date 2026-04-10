@@ -1,6 +1,5 @@
 // api.js — centralized API helpers with global 401 interception
 
-// Use VITE_API_URL env var in production (set in Vercel dashboard).
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 // ── Global unauthorized handler ───────────────────────────────────────────────
