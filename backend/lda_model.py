@@ -772,13 +772,23 @@ class LDASkillsAnalyzer:
 
     def _load(self) -> None:
         if not MODEL_PATH.exists():
-            logger.warning("lda_model.joblib not found at %s.", MODEL_PATH)
+            logger.warning("lda_model.joblib not found at %s. LDA features disabled.", MODEL_PATH)
             return
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            pipeline = joblib.load(MODEL_PATH)
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                pipeline = joblib.load(MODEL_PATH)
+        except Exception as e:
+            logger.error(
+                "Failed to load lda_model.joblib: %s. "
+                "This is usually a numpy version mismatch — the model was saved with a different "
+                "numpy than what is installed. Re-export the model using numpy==%s, or update "
+                "requirements.txt to match your local numpy version. LDA features disabled.",
+                e, np.__version__,
+            )
+            return
         if not isinstance(pipeline, dict) or "lda" not in pipeline or "vectorizer" not in pipeline:
-            logger.error("joblib must be a dict with 'lda' and 'vectorizer'.")
+            logger.error("joblib must be a dict with 'lda' and 'vectorizer'. LDA features disabled.")
             return
         self.lda          = pipeline["lda"]
         self.vectorizer   = pipeline["vectorizer"]

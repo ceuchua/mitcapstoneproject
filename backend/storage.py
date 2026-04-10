@@ -1,24 +1,68 @@
 """
-storage.py  —  Graduate Tracer System v3
-JSON-file persistence. Swap for PostgreSQL/SQLAlchemy when scaling.
+storage.py — Graduate Tracer System v3
+Dual-mode persistence:
+  • Local / dev  → JSON files  (no env vars needed)
+  • Production   → MongoDB Atlas (set MONGODB_URI environment variable)
+
+Mode is detected automatically at startup. No code changes needed to switch.
 """
 
 import json
+import logging
 import os
 import hashlib
 from pathlib import Path
 from collections import Counter
 
-DATA_DIR       = Path(os.getenv("TRACER_DATA_DIR", "./data"))
-USERS_FILE     = DATA_DIR / "users.json"
-EMPLOYMENT_FILE= DATA_DIR / "employment_records.json"
-QUESTIONS_FILE = DATA_DIR / "questions.json"
-RESPONSES_FILE = DATA_DIR / "tracer_responses.json"
+logger = logging.getLogger(__name__)
 
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+# ── Mode detection ─────────────────────────────────────────────────────────────
+#
+#   Local dev  : MONGODB_URI is not set → JSON files in ./data/
+#   Production : MONGODB_URI is set     → MongoDB Atlas
+#
+_MONGO_URI = os.getenv("MONGODB_URI", "").strip()
+_USE_MONGO = bool(_MONGO_URI)
 
+# ── MongoDB setup (production) ────────────────────────────────────────────────
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+if _USE_MONGO:
+    try:
+        import certifi
+        from pymongo import MongoClient, UpdateOne
+        _client = MongoClient(_MONGO_URI, tlsCAFile=certifi.where(), serverSelectionTimeoutMS=5000)
+        _DB     = _client[os.getenv("MONGO_DB_NAME", "tracer_system")]
+        logger.info("storage: MongoDB Atlas mode — db=%s", _DB.name)
+    except Exception as _mongo_err:
+        logger.error("storage: MongoDB init failed: %s — falling back to JSON", _mongo_err)
+        _USE_MONGO = False
+
+def _col(name: str):
+    """Return a MongoDB collection. Only called when _USE_MONGO is True."""
+    return _DB[name]
+
+def _clean(doc: dict) -> dict:
+    """Strip MongoDB's internal _id field before returning a document."""
+    if doc is None:
+        return None
+    d = dict(doc)
+    d.pop("_id", None)
+    return d
+
+def _clean_list(docs) -> list[dict]:
+    return [_clean(d) for d in docs]
+
+# ── JSON setup (local dev) ────────────────────────────────────────────────────
+
+DATA_DIR        = Path(os.getenv("TRACER_DATA_DIR", "./data"))
+USERS_FILE      = DATA_DIR / "users.json"
+EMPLOYMENT_FILE = DATA_DIR / "employment_records.json"
+QUESTIONS_FILE  = DATA_DIR / "questions.json"
+RESPONSES_FILE  = DATA_DIR / "tracer_responses.json"
+
+if not _USE_MONGO:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info("storage: JSON file mode — data dir=%s", DATA_DIR)
 
 def _read(path: Path) -> list[dict]:
     if not path.exists():
@@ -30,159 +74,13 @@ def _write(path: Path, data: list[dict]) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
+# ── Common utilities ──────────────────────────────────────────────────────────
+
 def hash_password(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
 
 def verify_password(pw: str, hashed: str) -> bool:
     return hash_password(pw) == hashed
-
-
-# ── Users / Auth ──────────────────────────────────────────────────────────────
-
-def save_user(record: dict) -> None:
-    data = _read(USERS_FILE)
-    data.append(record)
-    _write(USERS_FILE, data)
-
-def find_user_by_email(email: str) -> dict | None:
-    return next((u for u in _read(USERS_FILE) if u["email"].lower() == email.lower()), None)
-
-def find_user_by_identifier(identifier: str) -> dict | None:
-    """
-    Find a user by email OR student ID.
-    Tries email first (case-insensitive), then falls back to student_id.
-    Allows students to log in with either their email or their student ID.
-    """
-    ident = identifier.strip()
-    # Try email first
-    user = next((u for u in _read(USERS_FILE) if u["email"].lower() == ident.lower()), None)
-    if user:
-        return user
-    # Fall back to student_id (only students have this)
-    user = next(
-        (u for u in _read(USERS_FILE)
-         if u.get("student_id") and u["student_id"] == ident),
-        None,
-    )
-    return user
-
-def find_user_by_id(user_id: str) -> dict | None:
-    return next((u for u in _read(USERS_FILE) if u["user_id"] == user_id), None)
-
-def find_user_by_token(token: str) -> dict | None:
-    return next((u for u in _read(USERS_FILE) if u.get("token") == token), None)
-
-def update_user(user_id: str, updates: dict) -> dict | None:
-    data = _read(USERS_FILE)
-    for i, u in enumerate(data):
-        if u["user_id"] == user_id:
-            data[i] = {**u, **updates}
-            _write(USERS_FILE, data)
-            return data[i]
-    return None
-
-def list_users(role: str | None = None) -> list[dict]:
-    users = _read(USERS_FILE)
-    if role:
-        users = [u for u in users if u.get("role") == role]
-    return users
-
-def email_exists(email: str) -> bool:
-    return find_user_by_email(email) is not None
-
-def delete_user(user_id: str) -> bool:
-    """
-    Hard-delete a user account and cascade-delete all their associated data:
-      - tracer study response
-      - employment records (source of skill trend analysis)
-    Returns True if the user was found and deleted.
-    """
-    data = _read(USERS_FILE)
-    new_data = [u for u in data if u["user_id"] != user_id]
-    if len(new_data) == len(data):
-        return False
-    _write(USERS_FILE, new_data)
-    # Cascade: tracer response
-    responses = _read(RESPONSES_FILE)
-    new_responses = [r for r in responses if r.get("user_id") != user_id]
-    if len(new_responses) != len(responses):
-        _write(RESPONSES_FILE, new_responses)
-    # Cascade: employment records (feeds industry skill trends)
-    emp = _read(EMPLOYMENT_FILE)
-    new_emp = [r for r in emp if r.get("graduate_id") != user_id]
-    if len(new_emp) != len(emp):
-        _write(EMPLOYMENT_FILE, new_emp)
-    return True
-
-
-def has_super_admin() -> bool:
-    return any(u.get("role") == "super_admin" for u in _read(USERS_FILE))
-
-
-def clear_all_tokens() -> int:
-    data    = _read(USERS_FILE)
-    cleared = 0
-    for user in data:
-        if user.get("token"):
-            user["token"]            = None
-            user["token_expires_at"] = None
-            cleared += 1
-    if cleared:
-        _write(USERS_FILE, data)
-    return cleared
-
-
-# ── Employment Records ────────────────────────────────────────────────────────
-
-def save_employment(record: dict) -> None:
-    data = _read(EMPLOYMENT_FILE)
-    data.append(record)
-    _write(EMPLOYMENT_FILE, data)
-
-def read_employment_records(limit: int = 100, offset: int = 0) -> list[dict]:
-    return _read(EMPLOYMENT_FILE)[offset: offset + limit]
-
-def records_for_user(user_id: str) -> list[dict]:
-    return [r for r in _read(EMPLOYMENT_FILE) if r.get("graduate_id") == user_id]
-
-def find_employment_record(record_id: str) -> dict | None:
-    return next((r for r in _read(EMPLOYMENT_FILE) if r["record_id"] == record_id), None)
-
-def all_job_texts() -> list[str]:
-    texts = []
-    for r in _read(EMPLOYMENT_FILE):
-        parts = [r.get("job_title") or "", r.get("job_description") or "", r.get("job_skills_required") or ""]
-        combined = " ".join(p for p in parts if p).strip()
-        if combined:
-            texts.append(combined)
-    return texts
-
-
-# ── Questionnaire Questions ───────────────────────────────────────────────────
-#
-# Each question carries two stability fields:
-#   semantic_role : str | None
-#       Stable identifier used by backend analytics — NEVER changes even if
-#       the admin renames or rewrites the question text.
-#       The dashboard queries by role, not by question_id.
-#
-#   protected : bool
-#       If True, the admin UI shows a lock icon and blocks deletion.
-#       The admin can still edit question text and options, but cannot
-#       remove the question or change its semantic_role.
-#
-# Semantic roles in use:
-#   employment_status   → pie chart, LDA trigger condition
-#   employer_name       → admin table display
-#   job_title           → admin table, skill trend LDA input
-#   employer_sector     → sector pie chart
-#   course_relevance    → related-to-course rate
-#   months_to_employment→ time-to-job metric
-#   job_description     → skill trend LDA corpus
-#   skills_free_text    → parsed into skill list, skill frequency chart
-#   satisfaction_rating → satisfaction chart
-#   curriculum_rating   → curriculum satisfaction chart
-#   (None)              → admin-added custom questions, shown generically
 
 DEFAULT_QUESTIONS = [
     # ─────────────────────────────────────────────────────────────────────────
@@ -886,6 +784,7 @@ DEFAULT_QUESTIONS = [
         "required": False, "order": 42,
     },
 ]
+
 _CHED_QUESTION_IDS = {q["question_id"] for q in DEFAULT_QUESTIONS}
 
 # IDs that exist ONLY in the old pre-CHED set (never appear in DEFAULT_QUESTIONS)
@@ -965,35 +864,245 @@ def _migrate_questions(data: list[dict]) -> tuple[list[dict], bool]:
     return data, changed
 
 
+
+
 def _ensure_default_questions() -> None:
-    if not QUESTIONS_FILE.exists():
-        defaults_with_enabled = [{**q, "enabled": True} for q in DEFAULT_QUESTIONS]
-        _write(QUESTIONS_FILE, defaults_with_enabled)
-        return
-    data              = _read(QUESTIONS_FILE)
-    migrated, changed = _migrate_questions(data)
-    if changed:
-        _write(QUESTIONS_FILE, migrated)
+    """Seed questions on first run; migrate if an older format is detected."""
+    if _USE_MONGO:
+        col = _col("questions")
+        if col.count_documents({}) == 0:
+            col.insert_many([dict(q) for q in DEFAULT_QUESTIONS])
+            logger.info("MongoDB: seeded %d CHED questions.", len(DEFAULT_QUESTIONS))
+            return
+        existing_ids      = {d["question_id"] for d in col.find({}, {"question_id": 1})}
+        is_old_format     = bool(existing_ids & _OLD_EXCLUSIVE_IDS)
+        is_ched           = bool(existing_ids & _CHED_EXCLUSIVE_IDS)
+        missing_from_ched = _CHED_QUESTION_IDS - existing_ids
+
+        if is_old_format and not is_ched:
+            old_all = _OLD_EXCLUSIVE_IDS | {"q_emp_status", "q_employer_name", "q_satisfaction"}
+            col.delete_many({"question_id": {"$in": list(old_all)}})
+            col.insert_many([dict(q) for q in DEFAULT_QUESTIONS])
+            logger.info("MongoDB: migrated to CHED question set.")
+            return
+
+        if missing_from_ched:
+            qid_map = {q["question_id"]: q for q in DEFAULT_QUESTIONS}
+            additions = [dict(qid_map[qid]) for qid in missing_from_ched if qid in qid_map]
+            if additions:
+                col.insert_many(additions)
+            logger.info("MongoDB: added %d missing CHED questions.", len(additions))
+            return
+
+        # Field-level migration
+        for q in DEFAULT_QUESTIONS:
+            col.update_one(
+                {"question_id": q["question_id"]},
+                {"$setOnInsert": {"semantic_role": q.get("semantic_role"),
+                                  "protected":     q.get("protected", False),
+                                  "enabled":       q.get("enabled", True)}},
+                upsert=False,
+            )
+    else:
+        if not QUESTIONS_FILE.exists():
+            _write(QUESTIONS_FILE, [dict(q) for q in DEFAULT_QUESTIONS])
+            return
+        data              = _read(QUESTIONS_FILE)
+        migrated, changed = _migrate_questions(data)
+        if changed:
+            _write(QUESTIONS_FILE, migrated)
 
 
-def read_questions() -> list[dict]:
-    _ensure_default_questions()
-    return sorted(_read(QUESTIONS_FILE), key=lambda q: q.get("order", 0))
+# ═════════════════════════════════════════════════════════════════════════════
+# PUBLIC API — identical signatures regardless of backend
+# ═════════════════════════════════════════════════════════════════════════════
+
+# ── Users / Auth ──────────────────────────────────────────────────────────────
+
+def save_user(record: dict) -> None:
+    if _USE_MONGO:
+        _col("users").insert_one(dict(record))
+    else:
+        data = _read(USERS_FILE)
+        data.append(record)
+        _write(USERS_FILE, data)
 
 
-def get_question_by_role(role: str) -> dict | None:
-    """Return the first question with the given semantic_role."""
+def find_user_by_email(email: str) -> dict | None:
+    if _USE_MONGO:
+        return _clean(_col("users").find_one({"email": {"$regex": f"^{email}$", "$options": "i"}}))
+    return next((u for u in _read(USERS_FILE) if u["email"].lower() == email.lower()), None)
+
+
+def find_user_by_identifier(identifier: str) -> dict | None:
+    """Find a user by email OR student ID — lets students log in with either."""
+    ident = identifier.strip()
+    if _USE_MONGO:
+        doc = _col("users").find_one({"email": {"$regex": f"^{ident}$", "$options": "i"}})
+        if doc:
+            return _clean(doc)
+        return _clean(_col("users").find_one({"student_id": ident}))
+    user = next((u for u in _read(USERS_FILE) if u["email"].lower() == ident.lower()), None)
+    if user:
+        return user
     return next(
-        (q for q in read_questions() if q.get("semantic_role") == role),
+        (u for u in _read(USERS_FILE) if u.get("student_id") and u["student_id"] == ident),
         None,
     )
 
 
+def find_user_by_id(user_id: str) -> dict | None:
+    if _USE_MONGO:
+        return _clean(_col("users").find_one({"user_id": user_id}))
+    return next((u for u in _read(USERS_FILE) if u["user_id"] == user_id), None)
+
+
+def find_user_by_token(token: str) -> dict | None:
+    if _USE_MONGO:
+        return _clean(_col("users").find_one({"token": token}))
+    return next((u for u in _read(USERS_FILE) if u.get("token") == token), None)
+
+
+def update_user(user_id: str, updates: dict) -> dict | None:
+    if _USE_MONGO:
+        result = _col("users").find_one_and_update(
+            {"user_id": user_id},
+            {"$set": updates},
+            return_document=True,
+        )
+        return _clean(result)
+    data = _read(USERS_FILE)
+    for i, u in enumerate(data):
+        if u["user_id"] == user_id:
+            data[i] = {**u, **updates}
+            _write(USERS_FILE, data)
+            return data[i]
+    return None
+
+
+def list_users(role: str | None = None) -> list[dict]:
+    if _USE_MONGO:
+        query = {"role": role} if role else {}
+        return _clean_list(_col("users").find(query))
+    users = _read(USERS_FILE)
+    if role:
+        users = [u for u in users if u.get("role") == role]
+    return users
+
+
+def email_exists(email: str) -> bool:
+    return find_user_by_email(email) is not None
+
+
+def delete_user(user_id: str) -> bool:
+    """Hard-delete a user and cascade-delete their response and employment records."""
+    if _USE_MONGO:
+        result = _col("users").delete_one({"user_id": user_id})
+        if result.deleted_count == 0:
+            return False
+        _col("tracer_responses").delete_many({"user_id": user_id})
+        _col("employment_records").delete_many({"graduate_id": user_id})
+        return True
+    data     = _read(USERS_FILE)
+    new_data = [u for u in data if u["user_id"] != user_id]
+    if len(new_data) == len(data):
+        return False
+    _write(USERS_FILE, new_data)
+    responses    = _read(RESPONSES_FILE)
+    new_responses = [r for r in responses if r.get("user_id") != user_id]
+    if len(new_responses) != len(responses):
+        _write(RESPONSES_FILE, new_responses)
+    emp     = _read(EMPLOYMENT_FILE)
+    new_emp = [r for r in emp if r.get("graduate_id") != user_id]
+    if len(new_emp) != len(emp):
+        _write(EMPLOYMENT_FILE, new_emp)
+    return True
+
+
+def has_super_admin() -> bool:
+    if _USE_MONGO:
+        return _col("users").count_documents({"role": "super_admin"}) > 0
+    return any(u.get("role") == "super_admin" for u in _read(USERS_FILE))
+
+
+def clear_all_tokens() -> int:
+    if _USE_MONGO:
+        result = _col("users").update_many(
+            {"token": {"$ne": None}},
+            {"$set": {"token": None, "token_expires_at": None}},
+        )
+        return result.modified_count
+    data    = _read(USERS_FILE)
+    cleared = 0
+    for user in data:
+        if user.get("token"):
+            user["token"]            = None
+            user["token_expires_at"] = None
+            cleared += 1
+    if cleared:
+        _write(USERS_FILE, data)
+    return cleared
+
+
+# ── Employment Records ────────────────────────────────────────────────────────
+
+def save_employment(record: dict) -> None:
+    if _USE_MONGO:
+        _col("employment_records").insert_one(dict(record))
+    else:
+        data = _read(EMPLOYMENT_FILE)
+        data.append(record)
+        _write(EMPLOYMENT_FILE, data)
+
+
+def read_employment_records(limit: int = 100, offset: int = 0) -> list[dict]:
+    if _USE_MONGO:
+        return _clean_list(_col("employment_records").find().skip(offset).limit(limit))
+    return _read(EMPLOYMENT_FILE)[offset: offset + limit]
+
+
+def records_for_user(user_id: str) -> list[dict]:
+    if _USE_MONGO:
+        return _clean_list(_col("employment_records").find({"graduate_id": user_id}))
+    return [r for r in _read(EMPLOYMENT_FILE) if r.get("graduate_id") == user_id]
+
+
+def find_employment_record(record_id: str) -> dict | None:
+    if _USE_MONGO:
+        return _clean(_col("employment_records").find_one({"record_id": record_id}))
+    return next((r for r in _read(EMPLOYMENT_FILE) if r["record_id"] == record_id), None)
+
+
+def all_job_texts() -> list[str]:
+    records = (
+        _clean_list(_col("employment_records").find())
+        if _USE_MONGO else _read(EMPLOYMENT_FILE)
+    )
+    texts = []
+    for r in records:
+        parts    = [r.get("job_title") or "", r.get("job_description") or "",
+                    r.get("job_skills_required") or ""]
+        combined = " ".join(p for p in parts if p).strip()
+        if combined:
+            texts.append(combined)
+    return texts
+
+
+# ── Questionnaire Questions ───────────────────────────────────────────────────
+
+def read_questions() -> list[dict]:
+    _ensure_default_questions()
+    if _USE_MONGO:
+        return sorted(_clean_list(_col("questions").find()), key=lambda q: q.get("order", 0))
+    return sorted(_read(QUESTIONS_FILE), key=lambda q: q.get("order", 0))
+
+
+def get_question_by_role(role: str) -> dict | None:
+    return next((q for q in read_questions() if q.get("semantic_role") == role), None)
+
+
 def get_answer_by_role(answers: dict, role: str) -> str | None:
-    """
-    Look up a student's answer by semantic role rather than question_id.
-    Safe against admin renames — role is stable, question_id may change.
-    """
+    """Look up a student's answer by semantic role — stable against admin renames."""
     q = get_question_by_role(role)
     if q:
         return answers.get(q["question_id"])
@@ -1001,13 +1110,22 @@ def get_answer_by_role(answers: dict, role: str) -> str | None:
 
 
 def save_question(record: dict) -> None:
-    data = _read(QUESTIONS_FILE)
-    data.append(record)
-    _write(QUESTIONS_FILE, data)
+    if _USE_MONGO:
+        _col("questions").insert_one(dict(record))
+    else:
+        data = _read(QUESTIONS_FILE)
+        data.append(record)
+        _write(QUESTIONS_FILE, data)
 
 
 def toggle_question_enabled(question_id: str, enabled: bool) -> dict | None:
-    """Enable or disable a question. Protected questions can also be toggled."""
+    if _USE_MONGO:
+        result = _col("questions").find_one_and_update(
+            {"question_id": question_id},
+            {"$set": {"enabled": enabled}},
+            return_document=True,
+        )
+        return _clean(result)
     data = read_questions()
     for i, q in enumerate(data):
         if q["question_id"] == question_id:
@@ -1023,12 +1141,19 @@ def read_questions_for_student() -> list[dict]:
 
 
 def update_question(question_id: str, updates: dict) -> dict | None:
+    # Never allow overwriting semantic_role or protected via update
+    updates.pop("semantic_role", None)
+    updates.pop("protected",     None)
+    if _USE_MONGO:
+        result = _col("questions").find_one_and_update(
+            {"question_id": question_id},
+            {"$set": updates},
+            return_document=True,
+        )
+        return _clean(result)
     data = read_questions()
     for i, q in enumerate(data):
         if q["question_id"] == question_id:
-            # Never allow overwriting semantic_role or protected via update
-            updates.pop("semantic_role", None)
-            updates.pop("protected",     None)
             data[i] = {**q, **updates}
             _write(QUESTIONS_FILE, data)
             return data[i]
@@ -1036,61 +1161,77 @@ def update_question(question_id: str, updates: dict) -> dict | None:
 
 
 def delete_question(question_id: str) -> tuple[bool, str]:
-    """
-    Returns (success, reason).
-    Protected questions cannot be deleted.
-    """
-    data = read_questions()
-    target = next((q for q in data if q["question_id"] == question_id), None)
+    """Returns (success, reason). Protected questions cannot be deleted."""
+    all_qs = read_questions()
+    target = next((q for q in all_qs if q["question_id"] == question_id), None)
     if not target:
         return False, "not_found"
     if target.get("protected"):
         return False, "protected"
-    new_data = [q for q in data if q["question_id"] != question_id]
-    _write(QUESTIONS_FILE, new_data)
+    if _USE_MONGO:
+        _col("questions").delete_one({"question_id": question_id})
+    else:
+        _write(QUESTIONS_FILE, [q for q in all_qs if q["question_id"] != question_id])
     return True, "ok"
 
 
 # ── Tracer Responses ──────────────────────────────────────────────────────────
 
 def save_response(record: dict) -> None:
-    data = _read(RESPONSES_FILE)
-    data = [r for r in data if r["user_id"] != record["user_id"]]
-    data.append(record)
-    _write(RESPONSES_FILE, data)
+    """Upsert: one response per user (replaces if already submitted)."""
+    if _USE_MONGO:
+        _col("tracer_responses").replace_one(
+            {"user_id": record["user_id"]},
+            dict(record),
+            upsert=True,
+        )
+    else:
+        data = _read(RESPONSES_FILE)
+        data = [r for r in data if r["user_id"] != record["user_id"]]
+        data.append(record)
+        _write(RESPONSES_FILE, data)
+
 
 def get_response_by_user(user_id: str) -> dict | None:
+    if _USE_MONGO:
+        return _clean(_col("tracer_responses").find_one({"user_id": user_id}))
     return next((r for r in _read(RESPONSES_FILE) if r["user_id"] == user_id), None)
 
+
 def read_all_responses() -> list[dict]:
+    if _USE_MONGO:
+        return _clean_list(_col("tracer_responses").find())
     return _read(RESPONSES_FILE)
 
+
 def get_response_by_id(response_id: str) -> dict | None:
+    if _USE_MONGO:
+        return _clean(_col("tracer_responses").find_one({"response_id": response_id}))
     return next((r for r in _read(RESPONSES_FILE) if r["response_id"] == response_id), None)
 
+
 def delete_response(response_id: str) -> bool:
-    """
-    Delete a single tracer response by ID and cascade-delete the corresponding
-    employment record (source of skill trend data). Returns True if deleted.
-    """
-    data = _read(RESPONSES_FILE)
+    """Delete a response and cascade-delete the corresponding employment record."""
+    if _USE_MONGO:
+        doc = _col("tracer_responses").find_one({"response_id": response_id}, {"user_id": 1})
+        if not doc:
+            return False
+        _col("tracer_responses").delete_one({"response_id": response_id})
+        _col("employment_records").delete_many({"graduate_id": doc.get("user_id")})
+        return True
+    data   = _read(RESPONSES_FILE)
     target = next((r for r in data if r["response_id"] == response_id), None)
     if not target:
         return False
     _write(RESPONSES_FILE, [r for r in data if r["response_id"] != response_id])
-    # Cascade: employment record for the same user
     user_id = target.get("user_id")
     if user_id:
-        emp = _read(EMPLOYMENT_FILE)
+        emp     = _read(EMPLOYMENT_FILE)
         new_emp = [r for r in emp if r.get("graduate_id") != user_id]
         if len(new_emp) != len(emp):
             _write(EMPLOYMENT_FILE, new_emp)
     return True
 
-
-
-
-# ── Stats ─────────────────────────────────────────────────────────────────────
 
 def compute_stats() -> dict:
     from skill_parser import parse_skills_from_responses
