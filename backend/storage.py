@@ -1,34 +1,77 @@
 """
 storage.py  —  Graduate Tracer System v3
-JSON-file persistence. Swap for PostgreSQL/SQLAlchemy when scaling.
+MongoDB Atlas persistence layer.
+Replaces JSON file storage. Every function has the same signature as the
+original so no other file (main.py, schemas.py, etc.) needs to change.
+
+Required environment variables:
+    MONGODB_URI     — Atlas connection string (mongodb+srv://...)
+    MONGO_DB_NAME   — database name (default: tracer_system)
 """
 
-import json
 import os
 import hashlib
-from pathlib import Path
+import logging
 from collections import Counter
 
-DATA_DIR       = Path(os.getenv("TRACER_DATA_DIR", "./data"))
-USERS_FILE     = DATA_DIR / "users.json"
-EMPLOYMENT_FILE= DATA_DIR / "employment_records.json"
-QUESTIONS_FILE = DATA_DIR / "questions.json"
-RESPONSES_FILE = DATA_DIR / "tracer_responses.json"
+from pymongo import MongoClient, ASCENDING
+from pymongo.collection import Collection
 
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+logger = logging.getLogger(__name__)
+
+
+# ── Connection ────────────────────────────────────────────────────────────────
+
+MONGO_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+DB_NAME   = os.getenv("MONGO_DB_NAME", "tracer_system")
+
+# certifi provides Mozilla's trusted CA bundle, which Atlas requires.
+# MongoClient is lazy — no actual connection is made until the first query.
+import certifi
+
+_client = MongoClient(
+    MONGO_URI,
+    tlsCAFile=certifi.where(),
+    serverSelectionTimeoutMS=30000,
+    connectTimeoutMS=20000,
+    socketTimeoutMS=20000,
+)
+_db = _client[DB_NAME]
+
+
+def _col(name: str) -> Collection:
+    return _db[name]
+
+
+def _clean(doc) -> dict | None:
+    """Strip MongoDB's internal _id field from a document."""
+    if doc is None:
+        return None
+    d = dict(doc)
+    d.pop("_id", None)
+    return d
+
+
+def _clean_list(cursor) -> list[dict]:
+    return [_clean(d) for d in cursor]
+
+
+def _ensure_indexes() -> None:
+    """Create indexes once on startup for query performance."""
+    _col("users").create_index("user_id",  unique=True)
+    _col("users").create_index("email",    unique=True, collation={"locale": "en", "strength": 2})
+    _col("users").create_index("token",    sparse=True)
+    _col("tracer_responses").create_index("user_id",     unique=True)
+    _col("tracer_responses").create_index("response_id", unique=True)
+    _col("employment_records").create_index("graduate_id")
+    _col("employment_records").create_index("record_id",  unique=True)
+    _col("questions").create_index("question_id",  unique=True)
+    _col("questions").create_index("semantic_role", sparse=True)
+
+
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _read(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def _write(path: Path, data: list[dict]) -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
 
 def hash_password(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -40,12 +83,15 @@ def verify_password(pw: str, hashed: str) -> bool:
 # ── Users / Auth ──────────────────────────────────────────────────────────────
 
 def save_user(record: dict) -> None:
-    data = _read(USERS_FILE)
-    data.append(record)
-    _write(USERS_FILE, data)
+    _col("users").insert_one(dict(record))
 
 def find_user_by_email(email: str) -> dict | None:
-    return next((u for u in _read(USERS_FILE) if u["email"].lower() == email.lower()), None)
+    return _clean(
+        _col("users").find_one(
+            {"email": email},
+            collation={"locale": "en", "strength": 2},   # case-insensitive
+        )
+    )
 
 def find_user_by_identifier(identifier: str) -> dict | None:
     """
@@ -67,91 +113,77 @@ def find_user_by_identifier(identifier: str) -> dict | None:
     return user
 
 def find_user_by_id(user_id: str) -> dict | None:
-    return next((u for u in _read(USERS_FILE) if u["user_id"] == user_id), None)
+    return _clean(_col("users").find_one({"user_id": user_id}))
 
 def find_user_by_token(token: str) -> dict | None:
-    return next((u for u in _read(USERS_FILE) if u.get("token") == token), None)
+    if not token:
+        return None
+    return _clean(_col("users").find_one({"token": token}))
 
 def update_user(user_id: str, updates: dict) -> dict | None:
-    data = _read(USERS_FILE)
-    for i, u in enumerate(data):
-        if u["user_id"] == user_id:
-            data[i] = {**u, **updates}
-            _write(USERS_FILE, data)
-            return data[i]
-    return None
+    result = _col("users").find_one_and_update(
+        {"user_id": user_id},
+        {"$set": updates},
+        return_document=True,
+    )
+    return _clean(result)
 
 def list_users(role: str | None = None) -> list[dict]:
-    users = _read(USERS_FILE)
-    if role:
-        users = [u for u in users if u.get("role") == role]
-    return users
+    query = {"role": role} if role else {}
+    return _clean_list(_col("users").find(query))
 
 def email_exists(email: str) -> bool:
-    return find_user_by_email(email) is not None
+    return _col("users").find_one(
+        {"email": email},
+        collation={"locale": "en", "strength": 2},
+    ) is not None
 
 def delete_user(user_id: str) -> bool:
     """
-    Hard-delete a user account and cascade-delete all their associated data:
-      - tracer study response
-      - employment records (source of skill trend analysis)
-    Returns True if the user was found and deleted.
+    Hard-delete a user and cascade: tracer response + employment records.
     """
-    data = _read(USERS_FILE)
-    new_data = [u for u in data if u["user_id"] != user_id]
-    if len(new_data) == len(data):
+    result = _col("users").delete_one({"user_id": user_id})
+    if result.deleted_count == 0:
         return False
-    _write(USERS_FILE, new_data)
-    # Cascade: tracer response
-    responses = _read(RESPONSES_FILE)
-    new_responses = [r for r in responses if r.get("user_id") != user_id]
-    if len(new_responses) != len(responses):
-        _write(RESPONSES_FILE, new_responses)
-    # Cascade: employment records (feeds industry skill trends)
-    emp = _read(EMPLOYMENT_FILE)
-    new_emp = [r for r in emp if r.get("graduate_id") != user_id]
-    if len(new_emp) != len(emp):
-        _write(EMPLOYMENT_FILE, new_emp)
+    _col("tracer_responses").delete_many({"user_id": user_id})
+    _col("employment_records").delete_many({"graduate_id": user_id})
     return True
 
-
 def has_super_admin() -> bool:
-    return any(u.get("role") == "super_admin" for u in _read(USERS_FILE))
-
+    return _col("users").find_one({"role": "super_admin"}) is not None
 
 def clear_all_tokens() -> int:
-    data    = _read(USERS_FILE)
-    cleared = 0
-    for user in data:
-        if user.get("token"):
-            user["token"]            = None
-            user["token_expires_at"] = None
-            cleared += 1
-    if cleared:
-        _write(USERS_FILE, data)
-    return cleared
+    result = _col("users").update_many(
+        {"token": {"$nin": [None, ""]}},
+        {"$set": {"token": None, "token_expires_at": None}},
+    )
+    return result.modified_count
 
 
 # ── Employment Records ────────────────────────────────────────────────────────
 
 def save_employment(record: dict) -> None:
-    data = _read(EMPLOYMENT_FILE)
-    data.append(record)
-    _write(EMPLOYMENT_FILE, data)
+    _col("employment_records").insert_one(dict(record))
 
 def read_employment_records(limit: int = 100, offset: int = 0) -> list[dict]:
-    return _read(EMPLOYMENT_FILE)[offset: offset + limit]
+    return _clean_list(
+        _col("employment_records").find().skip(offset).limit(limit)
+    )
 
 def records_for_user(user_id: str) -> list[dict]:
-    return [r for r in _read(EMPLOYMENT_FILE) if r.get("graduate_id") == user_id]
+    return _clean_list(_col("employment_records").find({"graduate_id": user_id}))
 
 def find_employment_record(record_id: str) -> dict | None:
-    return next((r for r in _read(EMPLOYMENT_FILE) if r["record_id"] == record_id), None)
+    return _clean(_col("employment_records").find_one({"record_id": record_id}))
 
 def all_job_texts() -> list[str]:
     texts = []
-    for r in _read(EMPLOYMENT_FILE):
-        parts = [r.get("job_title") or "", r.get("job_description") or "", r.get("job_skills_required") or ""]
+    for r in _col("employment_records").find():
+        parts = [
+            r.get("job_title")         or "",
+            r.get("job_description")   or "",
+            r.get("job_skills_required") or "",
+        ]
         combined = " ".join(p for p in parts if p).strip()
         if combined:
             texts.append(combined)
@@ -159,30 +191,6 @@ def all_job_texts() -> list[str]:
 
 
 # ── Questionnaire Questions ───────────────────────────────────────────────────
-#
-# Each question carries two stability fields:
-#   semantic_role : str | None
-#       Stable identifier used by backend analytics — NEVER changes even if
-#       the admin renames or rewrites the question text.
-#       The dashboard queries by role, not by question_id.
-#
-#   protected : bool
-#       If True, the admin UI shows a lock icon and blocks deletion.
-#       The admin can still edit question text and options, but cannot
-#       remove the question or change its semantic_role.
-#
-# Semantic roles in use:
-#   employment_status   → pie chart, LDA trigger condition
-#   employer_name       → admin table display
-#   job_title           → admin table, skill trend LDA input
-#   employer_sector     → sector pie chart
-#   course_relevance    → related-to-course rate
-#   months_to_employment→ time-to-job metric
-#   job_description     → skill trend LDA corpus
-#   skills_free_text    → parsed into skill list, skill frequency chart
-#   satisfaction_rating → satisfaction chart
-#   curriculum_rating   → curriculum satisfaction chart
-#   (None)              → admin-added custom questions, shown generically
 
 DEFAULT_QUESTIONS = [
     # ─────────────────────────────────────────────────────────────────────────
@@ -190,24 +198,11 @@ DEFAULT_QUESTIONS = [
     # Q1 Name, Q3 Email, Q4 Telephone, Q5 Mobile — captured at registration.
     # ─────────────────────────────────────────────────────────────────────────
     {
-        "question_id":   "q_permanent_address",
-        "semantic_role": None,
-        "protected":     False,
-        "enabled":       True,
-        "section":       "General Information",
-        "text":          "Permanent Address",
-        "type":          "text",
-        "options":       None,
-        "required":      False,
-        "order":         1,
-    },
-    {
-        "question_id":   "q_civil_status",
-        "semantic_role": None,
-        "protected":     False,
-        "enabled":       True,
-        "section":       "General Information",
-        "text":          "Civil Status",
+        "question_id":   "q_emp_status",
+        "semantic_role": "employment_status",
+        "protected":     True,
+        "section":       "Employment",
+        "text":          "What is your current employment status?",
         "type":          "single_choice",
         "options": [
             {"id":"single",        "label":"Single"},
@@ -233,12 +228,11 @@ DEFAULT_QUESTIONS = [
         "required": False, "order": 3,
     },
     {
-        "question_id":   "q_birthday",
-        "semantic_role": None,
-        "protected":     False,
-        "enabled":       True,
-        "section":       "General Information",
-        "text":          "Birthday (Month / Day / Year)",
+        "question_id":   "q_employer_name",
+        "semantic_role": "employer_name",
+        "protected":     True,
+        "section":       "Employment",
+        "text":          "Name of your employer or company:",
         "type":          "text",
         "options":       None,
         "required":      False,
@@ -544,31 +538,8 @@ DEFAULT_QUESTIONS = [
         "question_id":   "q_occupation",
         "semantic_role": "job_title",
         "protected":     True,
-        "enabled":       True,
-        "section":       "Employment Data",
-        "text":          "Present Occupation (Philippine Standard Occupational Classification — PSOC 1992)",
-        "type":          "single_choice",
-        "options": [
-            {"id":"officials_managers", "label":"Officials, Corporate Executives, Managers and Supervisors"},
-            {"id":"professionals",      "label":"Professionals"},
-            {"id":"technicians",        "label":"Technicians and Associate Professionals"},
-            {"id":"clerks",             "label":"Clerks"},
-            {"id":"service_workers",    "label":"Service Workers and Shop and Market Sales Workers"},
-            {"id":"farmers",            "label":"Farmers, Forestry Workers and Fishermen"},
-            {"id":"trades_workers",     "label":"Trades and Related Workers"},
-            {"id":"plant_operators",    "label":"Plant and Machine Operators and Assemblers"},
-            {"id":"laborers",           "label":"Laborers and Unskilled Workers"},
-            {"id":"special_occupation", "label":"Special Occupation"},
-        ],
-        "required": False, "order": 23,
-    },
-    {
-        "question_id":   "q_employer_name",
-        "semantic_role": "employer_name",
-        "protected":     True,
-        "enabled":       True,
-        "section":       "Employment Data",
-        "text":          "Name of Company or Organization (including address)",
+        "section":       "Employment",
+        "text":          "What is your current job title or position?",
         "type":          "text",
         "options":       None,
         "required":      False,
@@ -578,9 +549,8 @@ DEFAULT_QUESTIONS = [
         "question_id":   "q_employer_sector",
         "semantic_role": "employer_sector",
         "protected":     True,
-        "enabled":       True,
-        "section":       "Employment Data",
-        "text":          "Major line of business of the company you are presently employed in:",
+        "section":       "Employment",
+        "text":          "Which sector does your employer belong to?",
         "type":          "single_choice",
         "options": [
             {"id":"agriculture",       "label":"Agriculture, Hunting and Forestry"},
@@ -658,13 +628,13 @@ DEFAULT_QUESTIONS = [
         "question_id":   "q_first_job_related",
         "semantic_role": "course_relevance",
         "protected":     True,
-        "enabled":       True,
-        "section":       "First Job",
-        "text":          "Is your first job related to the course you took up in college?",
+        "section":       "Employment",
+        "text":          "Is your current job related to your degree program?",
         "type":          "single_choice",
         "options": [
-            {"id":"yes","label":"Yes"},
-            {"id":"no", "label":"No"},
+            {"id": "yes",        "label": "Yes"},
+            {"id": "no",         "label": "No"},
+            {"id": "partially",  "label": "Partially"},
         ],
         "required": False, "order": 29,
     },
@@ -672,51 +642,12 @@ DEFAULT_QUESTIONS = [
         "question_id":   "q_accept_reason",
         "semantic_role": None,
         "protected":     False,
-        "enabled":       True,
-        "section":       "First Job",
-        "text":          "If not related to your course, what were your reasons for accepting the job? (You may select more than one answer)",
-        "type":          "multi_choice",
-        "options": [
-            {"id":"salary",        "label":"Salaries and benefits"},
-            {"id":"career",        "label":"Career challenge"},
-            {"id":"special_skill", "label":"Related to special skills"},
-            {"id":"proximity",     "label":"Proximity to residence"},
-        ],
-        "required": False, "order": 30,
-    },
-    {
-        "question_id":   "q_change_reason",
-        "semantic_role": None,
-        "protected":     False,
-        "enabled":       True,
-        "section":       "First Job",
-        "text":          "What were your reason(s) for changing job? (You may select more than one answer)",
-        "type":          "multi_choice",
-        "options": [
-            {"id":"salary",        "label":"Salaries and benefits"},
-            {"id":"career",        "label":"Career challenge"},
-            {"id":"special_skill", "label":"Related to special skills"},
-            {"id":"proximity",     "label":"Proximity to residence"},
-        ],
-        "required": False, "order": 31,
-    },
-    {
-        "question_id":   "q_first_job_duration",
-        "semantic_role": None,
-        "protected":     False,
-        "enabled":       True,
-        "section":       "First Job",
-        "text":          "How long did you stay in your first job?",
-        "type":          "single_choice",
-        "options": [
-            {"id":"lt_1m", "label":"Less than a month"},
-            {"id":"1_6m",  "label":"1 to 6 months"},
-            {"id":"7_11m", "label":"7 to 11 months"},
-            {"id":"1_2y",  "label":"1 year to less than 2 years"},
-            {"id":"2_3y",  "label":"2 years to less than 3 years"},
-            {"id":"3_4y",  "label":"3 years to less than 4 years"},
-        ],
-        "required": False, "order": 32,
+        "section":       "Employment",
+        "text":          "How many months after graduation did you find your first job?",
+        "type":          "number",
+        "options":       None,
+        "required":      False,
+        "order":         6,
     },
     {
         "question_id":   "q_job_search_method",
@@ -741,69 +672,12 @@ DEFAULT_QUESTIONS = [
         "question_id":   "q_time_to_job",
         "semantic_role": "months_to_employment",
         "protected":     True,
-        "enabled":       True,
-        "section":       "First Job",
-        "text":          "How long did it take you to land your first job after graduation?",
-        "type":          "single_choice",
-        "options": [
-            {"id":"lt_1m", "label":"Less than a month"},
-            {"id":"1_6m",  "label":"1 to 6 months"},
-            {"id":"7_11m", "label":"7 to 11 months"},
-            {"id":"1_2y",  "label":"1 year to less than 2 years"},
-            {"id":"2_3y",  "label":"2 years to less than 3 years"},
-            {"id":"3_4y",  "label":"3 years to less than 4 years"},
-        ],
-        "required": False, "order": 34,
-    },
-    {
-        "question_id":   "q_job_level_first",
-        "semantic_role": None,
-        "protected":     False,
-        "enabled":       True,
-        "section":       "First Job",
-        "text":          "Job Level Position — First Job",
-        "type":          "single_choice",
-        "options": [
-            {"id":"rank_clerical", "label":"Rank or Clerical"},
-            {"id":"professional",  "label":"Professional, Technical or Supervisory"},
-            {"id":"managerial",    "label":"Managerial or Executive"},
-            {"id":"self_employed", "label":"Self-employed"},
-        ],
-        "required": False, "order": 35,
-    },
-    {
-        "question_id":   "q_job_level",
-        "semantic_role": None,
-        "protected":     False,
-        "enabled":       True,
-        "section":       "First Job",
-        "text":          "Job Level Position — Current or Present Job",
-        "type":          "single_choice",
-        "options": [
-            {"id":"rank_clerical", "label":"Rank or Clerical"},
-            {"id":"professional",  "label":"Professional, Technical or Supervisory"},
-            {"id":"managerial",    "label":"Managerial or Executive"},
-            {"id":"self_employed", "label":"Self-employed"},
-        ],
-        "required": False, "order": 36,
-    },
-    {
-        "question_id":   "q_monthly_income",
-        "semantic_role": None,
-        "protected":     False,
-        "enabled":       True,
-        "section":       "First Job",
-        "text":          "What was your initial gross monthly earning in your first job after college?",
-        "type":          "single_choice",
-        "options": [
-            {"id":"below_5k",  "label":"Below ₱5,000"},
-            {"id":"5k_10k",    "label":"₱5,000 to less than ₱10,000"},
-            {"id":"10k_15k",   "label":"₱10,000 to less than ₱15,000"},
-            {"id":"15k_20k",   "label":"₱15,000 to less than ₱20,000"},
-            {"id":"20k_25k",   "label":"₱20,000 to less than ₱25,000"},
-            {"id":"above_25k", "label":"₱25,000 and above"},
-        ],
-        "required": False, "order": 37,
+        "section":       "Skills",
+        "text":          "Briefly describe your main duties and responsibilities:",
+        "type":          "text",
+        "options":       None,
+        "required":      False,
+        "order":         7,
     },
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -827,27 +701,8 @@ DEFAULT_QUESTIONS = [
         "question_id":   "q_competencies",
         "semantic_role": "skills_free_text",
         "protected":     True,
-        "enabled":       True,
-        "section":       "Curriculum Assessment",
-        "text":          "What competencies learned in college did you find very useful in your job? (You may select more than one answer)",
-        "type":          "multi_choice",
-        "options": [
-            {"id":"communication",    "label":"Communication skills"},
-            {"id":"human_relations",  "label":"Human relations skills"},
-            {"id":"entrepreneurial",  "label":"Entrepreneurial skills"},
-            {"id":"it_skills",        "label":"Information Technology skills"},
-            {"id":"problem_solving",  "label":"Problem-solving skills"},
-            {"id":"critical_thinking","label":"Critical thinking skills"},
-        ],
-        "required": False, "order": 39,
-    },
-    {
-        "question_id":   "q_curriculum_suggest",
-        "semantic_role": "job_description",
-        "protected":     True,
-        "enabled":       True,
-        "section":       "Curriculum Assessment",
-        "text":          "Please list down suggestions to further improve your course curriculum:",
+        "section":       "Skills",
+        "text":          "List the skills you use most in your current job (separate with commas):",
         "type":          "text",
         "options":       None,
         "required":      False,
@@ -911,44 +766,11 @@ _CHED_EXCLUSIVE_IDS = {
 }
 
 
-def _migrate_questions(data: list[dict]) -> tuple[list[dict], bool]:
+def _migrate_questions(data: list[dict]) -> list[dict]:
     """
-    Handles three migration scenarios:
-    1. OLD format (pre-CHED 10 questions): full replacement, preserve customs.
-    2. PARTIAL CHED (e.g. 27 of 35): merge in missing questions.
-    3. FULL CHED (35 questions): field-level migration only.
+    Add semantic_role, protected, and enabled fields to existing questions.
+    Ensures old questions.json files are forward-compatible without data loss.
     """
-    existing_ids     = {q["question_id"] for q in data}
-    is_old_format    = bool(existing_ids & _OLD_EXCLUSIVE_IDS)
-    is_ched          = bool(existing_ids & _CHED_EXCLUSIVE_IDS)
-    missing_from_ched = _CHED_QUESTION_IDS - existing_ids
-
-    # ── Case 1: Old pre-CHED format — full replacement ───────────────────────
-    if is_old_format and not is_ched:
-        old_all = _OLD_EXCLUSIVE_IDS | {"q_emp_status", "q_employer_name", "q_satisfaction"}
-        custom  = [q for q in data if q["question_id"] not in old_all]
-        migrated = [dict(q) for q in DEFAULT_QUESTIONS] + custom
-        for i, q in enumerate(migrated, 1):
-            q["order"] = i
-        return migrated, True
-
-    # ── Case 2: Partial CHED — add the missing questions ────────────────────
-    if missing_from_ched:
-        qid_to_default = {q["question_id"]: q for q in DEFAULT_QUESTIONS}
-        additions = [dict(qid_to_default[qid]) for qid in missing_from_ched
-                     if qid in qid_to_default]
-        base    = [q for q in data if q["question_id"] in _CHED_QUESTION_IDS]
-        customs = [q for q in data if q["question_id"] not in _CHED_QUESTION_IDS]
-        merged  = base + additions
-        order_map = {q["question_id"]: q["order"] for q in DEFAULT_QUESTIONS}
-        merged.sort(key=lambda q: order_map.get(q["question_id"], 999))
-        for i, q in enumerate(merged, 1):
-            q["order"] = i
-        for i, q in enumerate(customs, len(merged) + 1):
-            q["order"] = i
-        return merged + customs, True
-
-    # ── Case 3: Already full CHED — field-level migration only ────────────────
     role_map = {q["question_id"]: q for q in DEFAULT_QUESTIONS}
     changed  = False
     for q in data:
@@ -960,134 +782,107 @@ def _migrate_questions(data: list[dict]) -> tuple[list[dict], bool]:
             q["protected"] = defaults.get("protected", False)
             changed = True
         if "enabled" not in q:
-            q["enabled"] = True
+            q["enabled"] = True   # existing questions default to enabled
             changed = True
     return data, changed
 
 
 def _ensure_default_questions() -> None:
     if not QUESTIONS_FILE.exists():
+        # Add enabled:True to all defaults on first write
         defaults_with_enabled = [{**q, "enabled": True} for q in DEFAULT_QUESTIONS]
         _write(QUESTIONS_FILE, defaults_with_enabled)
         return
-    data              = _read(QUESTIONS_FILE)
+    # Migrate existing file if fields are missing
+    data           = _read(QUESTIONS_FILE)
     migrated, changed = _migrate_questions(data)
     if changed:
         _write(QUESTIONS_FILE, migrated)
 
 
 def read_questions() -> list[dict]:
-    _ensure_default_questions()
-    return sorted(_read(QUESTIONS_FILE), key=lambda q: q.get("order", 0))
-
-
-def get_question_by_role(role: str) -> dict | None:
-    """Return the first question with the given semantic_role."""
-    return next(
-        (q for q in read_questions() if q.get("semantic_role") == role),
-        None,
-    )
-
-
-def get_answer_by_role(answers: dict, role: str) -> str | None:
-    """
-    Look up a student's answer by semantic role rather than question_id.
-    Safe against admin renames — role is stable, question_id may change.
-    """
-    q = get_question_by_role(role)
-    if q:
-        return answers.get(q["question_id"])
-    return None
-
-
-def save_question(record: dict) -> None:
-    data = _read(QUESTIONS_FILE)
-    data.append(record)
-    _write(QUESTIONS_FILE, data)
-
-
-def toggle_question_enabled(question_id: str, enabled: bool) -> dict | None:
-    """Enable or disable a question. Protected questions can also be toggled."""
-    data = read_questions()
-    for i, q in enumerate(data):
-        if q["question_id"] == question_id:
-            data[i] = {**q, "enabled": enabled}
-            _write(QUESTIONS_FILE, data)
-            return data[i]
-    return None
+    return _clean_list(_col("questions").find().sort("order", ASCENDING))
 
 
 def read_questions_for_student() -> list[dict]:
-    """Return only enabled questions — what students see in the tracer study."""
-    return [q for q in read_questions() if q.get("enabled", True)]
+    return _clean_list(
+        _col("questions").find({"enabled": {"$ne": False}}).sort("order", ASCENDING)
+    )
+
+
+def get_question_by_role(role: str) -> dict | None:
+    return _clean(_col("questions").find_one({"semantic_role": role}))
+
+
+def get_answer_by_role(answers: dict, role: str) -> str | None:
+    q = get_question_by_role(role)
+    return answers.get(q["question_id"]) if q else None
+
+
+def save_question(record: dict) -> None:
+    _col("questions").insert_one(dict(record))
 
 
 def update_question(question_id: str, updates: dict) -> dict | None:
-    data = read_questions()
-    for i, q in enumerate(data):
-        if q["question_id"] == question_id:
-            # Never allow overwriting semantic_role or protected via update
-            updates.pop("semantic_role", None)
-            updates.pop("protected",     None)
-            data[i] = {**q, **updates}
-            _write(QUESTIONS_FILE, data)
-            return data[i]
-    return None
+    # Never allow overwriting semantic_role or protected
+    updates.pop("semantic_role", None)
+    updates.pop("protected",     None)
+    result = _col("questions").find_one_and_update(
+        {"question_id": question_id},
+        {"$set": updates},
+        return_document=True,
+    )
+    return _clean(result)
+
+
+def toggle_question_enabled(question_id: str, enabled: bool) -> dict | None:
+    result = _col("questions").find_one_and_update(
+        {"question_id": question_id},
+        {"$set": {"enabled": enabled}},
+        return_document=True,
+    )
+    return _clean(result)
 
 
 def delete_question(question_id: str) -> tuple[bool, str]:
-    """
-    Returns (success, reason).
-    Protected questions cannot be deleted.
-    """
-    data = read_questions()
-    target = next((q for q in data if q["question_id"] == question_id), None)
-    if not target:
+    q = _col("questions").find_one({"question_id": question_id})
+    if not q:
         return False, "not_found"
-    if target.get("protected"):
+    if q.get("protected"):
         return False, "protected"
-    new_data = [q for q in data if q["question_id"] != question_id]
-    _write(QUESTIONS_FILE, new_data)
+    _col("questions").delete_one({"question_id": question_id})
     return True, "ok"
 
 
 # ── Tracer Responses ──────────────────────────────────────────────────────────
 
 def save_response(record: dict) -> None:
-    data = _read(RESPONSES_FILE)
-    data = [r for r in data if r["user_id"] != record["user_id"]]
-    data.append(record)
-    _write(RESPONSES_FILE, data)
+    """Upsert — one response per student."""
+    _col("tracer_responses").replace_one(
+        {"user_id": record["user_id"]},
+        dict(record),
+        upsert=True,
+    )
 
 def get_response_by_user(user_id: str) -> dict | None:
-    return next((r for r in _read(RESPONSES_FILE) if r["user_id"] == user_id), None)
+    return _clean(_col("tracer_responses").find_one({"user_id": user_id}))
 
 def read_all_responses() -> list[dict]:
-    return _read(RESPONSES_FILE)
+    return _clean_list(_col("tracer_responses").find())
 
 def get_response_by_id(response_id: str) -> dict | None:
-    return next((r for r in _read(RESPONSES_FILE) if r["response_id"] == response_id), None)
+    return _clean(_col("tracer_responses").find_one({"response_id": response_id}))
 
 def delete_response(response_id: str) -> bool:
-    """
-    Delete a single tracer response by ID and cascade-delete the corresponding
-    employment record (source of skill trend data). Returns True if deleted.
-    """
-    data = _read(RESPONSES_FILE)
-    target = next((r for r in data if r["response_id"] == response_id), None)
-    if not target:
+    """Delete response and cascade employment records for the same user."""
+    r = _col("tracer_responses").find_one({"response_id": response_id})
+    if not r:
         return False
-    _write(RESPONSES_FILE, [r for r in data if r["response_id"] != response_id])
-    # Cascade: employment record for the same user
-    user_id = target.get("user_id")
+    user_id = r.get("user_id")
+    _col("tracer_responses").delete_one({"response_id": response_id})
     if user_id:
-        emp = _read(EMPLOYMENT_FILE)
-        new_emp = [r for r in emp if r.get("graduate_id") != user_id]
-        if len(new_emp) != len(emp):
-            _write(EMPLOYMENT_FILE, new_emp)
+        _col("employment_records").delete_many({"graduate_id": user_id})
     return True
-
-
 
 
 # ── Stats ─────────────────────────────────────────────────────────────────────
@@ -1095,22 +890,19 @@ def delete_response(response_id: str) -> bool:
 def compute_stats() -> dict:
     from skill_parser import parse_skills_from_responses
 
-    users     = [u for u in _read(USERS_FILE) if u.get("role") == "student"]
-    responses = _read(RESPONSES_FILE)
+    users     = [u for u in list_users() if u.get("role") == "student"]
+    responses = read_all_responses()
     questions = read_questions()
 
-    # ── Role-based answer lookup (flex against admin edits) ───────────────────
-
-    def _by_role(answers: dict, role: str) -> str | None:
+    def _by_role(answers, role):
         return get_answer_by_role(answers, role)
 
-    # Employment status counts
-    status_counts: Counter = Counter()
-    sector_counts: Counter = Counter()
-    related_answers: list[str] = []
-    month_values:   list[float] = []
-    satisfaction:   list[int]   = []
-    curriculum:     list[int]   = []
+    status_counts:  Counter      = Counter()
+    sector_counts:  Counter      = Counter()
+    related_answers: list[str]   = []
+    month_values:    list[float] = []
+    satisfaction:    list[int]   = []
+    curriculum:      list[int]   = []
 
     for r in responses:
         ans = r.get("answers", {})
@@ -1129,33 +921,20 @@ def compute_stats() -> dict:
 
         months = _by_role(ans, "months_to_employment")
         if months:
-            # CHED format: range option ID → approximate midpoint in months
-            _range_midpoints = {
-                "lt_1m": 0.5, "1_6m": 3.5,  "7_11m": 9.0,
-                "1_2y":  18.0, "2_3y": 30.0, "3_4y":  42.0,
-            }
-            midpoint = _range_midpoints.get(months)
-            if midpoint is not None:
-                month_values.append(midpoint)
-            else:
-                try: month_values.append(float(months))  # legacy numeric fallback
-                except (ValueError, TypeError): pass
+            try: month_values.append(float(months))
+            except (ValueError, TypeError): pass
 
         sat = _by_role(ans, "satisfaction_rating")
         if sat:
             try: satisfaction.append(int(sat))
             except (ValueError, TypeError): pass
-
-        cur = _by_role(ans, "curriculum_rating")
-        if cur:
-            try: curriculum.append(int(cur))
+        if s := _by_role(ans, "curriculum_rating"):
+            try: curriculum.append(int(s))
             except (ValueError, TypeError): pass
 
-    # Related-to-course rate
     related_yes  = sum(1 for a in related_answers if a == "yes")
     related_rate = related_yes / len(related_answers) if related_answers else None
 
-    # By program
     prog_counter: Counter = Counter()
     year_counter: Counter = Counter()
     for u in users:
@@ -1164,15 +943,9 @@ def compute_stats() -> dict:
         if u.get("graduation_year"):
             year_counter[u["graduation_year"]] += 1
 
-    # Parsed skill frequency (role-based, not hardcoded ID)
     all_parsed_skills = parse_skills_from_responses(responses, questions)
     skill_freq        = Counter(all_parsed_skills)
     top_skills        = [{"skill": s, "count": c} for s, c in skill_freq.most_common(20)]
-
-    # Average satisfaction ratings
-    avg_satisfaction = round(sum(satisfaction) / len(satisfaction), 2) if satisfaction else None
-    avg_curriculum   = round(sum(curriculum)   / len(curriculum),   2) if curriculum   else None
-    avg_months       = round(sum(month_values) / len(month_values), 1) if month_values  else None
 
     return {
         "total_graduates":            len(users),
@@ -1182,8 +955,8 @@ def compute_stats() -> dict:
         "related_to_course_rate":     related_rate,
         "records_by_program":         dict(prog_counter),
         "records_by_graduation_year": {str(k): v for k, v in year_counter.items()},
-        "top_skills":                 top_skills,        # parsed from free-text
-        "avg_satisfaction":           avg_satisfaction,
-        "avg_curriculum_rating":      avg_curriculum,
-        "avg_months_to_employment":   avg_months,
+        "top_skills":                 top_skills,
+        "avg_satisfaction":           round(sum(satisfaction)/len(satisfaction), 2) if satisfaction else None,
+        "avg_curriculum_rating":      round(sum(curriculum)/len(curriculum), 2)     if curriculum   else None,
+        "avg_months_to_employment":   round(sum(month_values)/len(month_values), 1) if month_values  else None,
     }
