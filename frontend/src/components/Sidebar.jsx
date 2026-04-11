@@ -67,7 +67,7 @@ const css = `
   .btn-signout:hover { background: transparent; color: ${T.bg}; border: 1px solid ${T.bg}; }
 `;
 
-export default function Sidebar({ page, setPage, user, healthy, onLogout }) {
+export default function Sidebar({ page, setPage, user, healthy, tracerDone, onLogout }) {
   const role = user?.role;
 
   const pages = role === "super_admin" ? SUPER_ADMIN_PAGES
@@ -91,11 +91,14 @@ export default function Sidebar({ page, setPage, user, healthy, onLogout }) {
         {pages.map(p => {
           if (p.id === "divider") return <div key="divider" className="nav-divider" />;
           const isActive = page === p.id;
+          const isLocked = p.id === "portfolio" && user?.role === "student" && !tracerDone;
           return (
             <div key={p.id}
               className={`nav-item ${isActive ? (isSuperAdmin && p.id === "accounts" ? "super-active" : "active") : ""}`}
-              onClick={() => setPage(p.id)}>
-              <span className="nav-icon">{p.icon}</span> {p.label}
+              style={isLocked ? { opacity: 0.45, cursor: "default" } : {}}
+              onClick={() => !isLocked && setPage(p.id)}>
+              <span className="nav-icon">{isLocked ? "🔒" : p.icon}</span>
+              {p.label}{isLocked ? " (Complete Tracer First)" : ""}
             </div>
           );
         })}

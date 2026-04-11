@@ -6,7 +6,7 @@ import { api } from "../../api";
 import { T } from "../../tokens";
 import { Spinner } from "../../components/UI";
 
-export default function TracerStudyPage({ user }) {
+export default function TracerStudyPage({ user, onNavigate, onTracerComplete }) {
   const [questions, setQuestions] = useState([]);
   const [existing, setExisting]   = useState(null);   // prior submission
   const [answers, setAnswers]     = useState({});
@@ -55,6 +55,7 @@ export default function TracerStudyPage({ user }) {
     try {
       await api.submitResponse({ user_id: user.user_id, answers });
       setSubmitted(true);
+      if (onTracerComplete) onTracerComplete();
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   }
@@ -70,9 +71,15 @@ export default function TracerStudyPage({ user }) {
       <div className="card" style={{ maxWidth: 560, margin: "60px auto", textAlign: "center", padding: 48 }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
         <h2 style={{ marginBottom: 8 }}>Thank you!</h2>
-        <p style={{ color: T.inkMuted, fontSize: 13, lineHeight: 1.7 }}>
-          Your tracer study response has been submitted. The system has automatically run a skills-gap analysis on your employment data. Visit your <strong>Portfolio</strong> page to see your skills alignment results.
+        <p style={{ color: T.inkMuted, fontSize: 13, lineHeight: 1.7, marginBottom: 28 }}>
+          Your tracer study response has been submitted. The system has automatically run
+          a skills-gap analysis on your employment data. Your portfolio and skill
+          recommendations are now unlocked.
         </p>
+        <button className="btn btn-primary" style={{ fontSize: 14, padding: "10px 28px" }}
+          onClick={() => onNavigate && onNavigate("portfolio")}>
+          View My Portfolio →
+        </button>
       </div>
     </div>
   );

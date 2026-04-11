@@ -83,6 +83,7 @@ export default function App() {
   const [healthy,     setHealthy]     = useState(null);
   const [page,        setPage]        = useState(null);
   const [booting,     setBooting]     = useState(true);
+  const [tracerDone,  setTracerDone]  = useState(false); // student has submitted tracer study
   const [showWarning, setShowWarning] = useState(false);
   const [countdown,   setCountdown]   = useState(0);
   const [expiredMsg,  setExpiredMsg]  = useState(false);
@@ -230,8 +231,20 @@ export default function App() {
         // Token is valid — restore the session
         const u = JSON.parse(savedUser);
         setUser(u);
-        setPage(defaultPage(u.role));
         stampActivity();
+        // For students, check tracer response to decide landing page
+        if (u.role === "student") {
+          try {
+            await api.getMyResponse();
+            setTracerDone(true);
+            setPage("portfolio");
+          } catch (_) {
+            setTracerDone(false);
+            setPage("tracer");
+          }
+        } else {
+          setPage(defaultPage(u.role));
+        }
       } catch (e) {
         // 401 or parse error — clear session
         clearLocalSession();
@@ -267,21 +280,34 @@ export default function App() {
 
   // ── Login ─────────────────────────────────────────────────────────────────────
 
-  function handleLogin(userData) {
+  async function handleLogin(userData) {
     setUser(userData);
-    setPage(defaultPage(userData.role));
     setExpiredMsg(false);
     localStorage.setItem(KEYS.token, userData.token);
     localStorage.setItem(KEYS.user,  JSON.stringify(userData));
     stampActivity();
+    // For students: check if they have already submitted the tracer study.
+    // If not, land them on the tracer study page first.
+    if (userData.role === "student") {
+      try {
+        await api.getMyResponse();
+        setTracerDone(true);
+        setPage("portfolio");
+      } catch (_) {
+        setTracerDone(false);
+        setPage("tracer");
+      }
+    } else {
+      setPage(defaultPage(userData.role));
+    }
   }
 
   // ── Page renderer ─────────────────────────────────────────────────────────────
 
   function renderPage() {
     if (user?.role === "student") {
-      if (page === "portfolio") return <PortfolioPage user={user} />;
-      if (page === "tracer")    return <TracerStudyPage user={user} />;
+      if (page === "portfolio") return <PortfolioPage user={user} onNavigate={setPage} tracerDone={tracerDone} />;
+      if (page === "tracer")    return <TracerStudyPage user={user} onNavigate={setPage} onTracerComplete={() => { setTracerDone(true); setPage("portfolio"); }} />;
     }
     if (user?.role === "admin") {
       if (page === "dashboard")     return <DashboardPage />;
@@ -342,6 +368,7 @@ export default function App() {
           setPage={setPage}
           user={user}
           healthy={healthy}
+          tracerDone={tracerDone}
           onLogout={() => handleLogout("manual")}
         />
         <main className="main">

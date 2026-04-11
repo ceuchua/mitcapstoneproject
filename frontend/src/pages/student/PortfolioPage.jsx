@@ -76,7 +76,7 @@ function googleSkillUrl(skill) {
   return `https://www.google.com/search?q=${encodeURIComponent(skill + " skill")}`;
 }
 
-export default function PortfolioPage({ user }) {
+export default function PortfolioPage({ user, onNavigate, tracerDone }) {
   const [profile,     setProfile]    = useState(null);
   const [editing,     setEditing]    = useState(false);
   const [recs,        setRecs]       = useState(null);
@@ -86,6 +86,104 @@ export default function PortfolioPage({ user }) {
   const [err,         setErr]        = useState(null);
   const [success,     setSuccess]    = useState(null);
   const [newSkill,    setNewSkill]   = useState("");
+
+  // ── Resume PDF export ──────────────────────────────────────────────────────
+  // Builds a print-optimised HTML page from student-authored fields only.
+  // No LDA predictions, recommendations, or system-generated data included.
+  function exportResumePDF() {
+    if (!profile) return;
+
+    const name     = `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Graduate";
+    const program  = profile.program           || "";
+    const major    = profile.major             || "";
+    const job      = profile.current_job       || "";
+    const employer = profile.current_employer  || "";
+    const linkedin = profile.linkedin_url      || "";
+    const contact  = profile.contact_number    || "";
+    const bio      = profile.bio               || "";
+    const skills   = profile.skills_self_reported || [];
+    const gradYear = profile.graduation_year   || "";
+
+    const section = (title, content) => content ? `
+      <div class="section">
+        <div class="section-title">${title}</div>
+        <div class="section-body">${content}</div>
+      </div>` : "";
+
+    const skillsHTML = skills.length > 0
+      ? `<div class="skills-grid">${skills.map(s =>
+          `<span class="skill-pill">${s}</span>`).join("")}</div>`
+      : "";
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>${name} \u2014 Resume</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', Arial, sans-serif; font-size: 11pt; color: #1A1714; background: #fff; }
+  .page { width: 8.5in; min-height: 11in; margin: 0 auto; padding: 0.65in 0.7in 0.7in; }
+  .header { border-bottom: 3px solid #800E13; padding-bottom: 14px; margin-bottom: 18px; }
+  .name { font-family: 'DM Serif Display', Georgia, serif; font-size: 28pt; color: #800E13; line-height: 1.1; margin-bottom: 4px; }
+  .headline { font-size: 12pt; font-weight: 600; color: #1A1714; margin-bottom: 6px; }
+  .contact-row { font-size: 9.5pt; color: #7A7168; display: flex; flex-wrap: wrap; gap: 16px; }
+  .contact-row a { color: #800E13; text-decoration: none; }
+  .section { margin-bottom: 16px; }
+  .section-title { font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: #800E13; border-bottom: 1px solid #E4DDD3; padding-bottom: 3px; margin-bottom: 8px; }
+  .section-body { font-size: 10.5pt; line-height: 1.6; color: #1A1714; }
+  .entry { margin-bottom: 6px; }
+  .entry-title { font-weight: 600; font-size: 11pt; }
+  .entry-sub { font-size: 10pt; color: #7A7168; }
+  .skills-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .skill-pill { background: #F5E8DE; color: #800E13; font-size: 9.5pt; font-weight: 600; padding: 3px 10px; border-radius: 20px; border: 1px solid #E4DDD3; }
+  .footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #E4DDD3; font-size: 8.5pt; color: #7A7168; text-align: center; }
+  @media print {
+    body { background: white; }
+    .page { padding: 0.55in 0.65in; width: 100%; }
+    @page { size: letter; margin: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div class="name">${name}</div>
+    ${job || program ? `<div class="headline">${[job, employer ? "at " + employer : ""].filter(Boolean).join(" ")}</div>` : ""}
+    <div class="contact-row">
+      ${contact  ? "<span>\u{1F4DE} " + contact + "</span>" : ""}
+      ${linkedin ? "<span>\u{1F517} <a href='" + linkedin + "' target='_blank'>" + linkedin.replace(/^https?:\\/\\/(www\\.)?/, "") + "</a></span>" : ""}
+    </div>
+  </div>
+  ${section("Professional Summary", bio ? "<p>" + bio + "</p>" : "")}
+  ${section("Education", (program || gradYear) ? `
+    <div class="entry">
+      <div class="entry-title">${program}${major ? " \u2014 " + major : ""}</div>
+      ${gradYear ? "<div class='entry-sub'>Graduated " + gradYear + "</div>" : ""}
+    </div>` : "")}
+  ${section("Professional Experience", (job || employer) ? `
+    <div class="entry">
+      <div class="entry-title">${job || "Current Position"}</div>
+      ${employer ? "<div class='entry-sub'>" + employer + "</div>" : ""}
+    </div>` : "")}
+  ${section("Skills", skillsHTML)}
+  <div class="footer">
+    Generated from the Graduate Tracer System \u00b7 ${new Date().toLocaleDateString("en-PH", { year:"numeric", month:"long", day:"numeric" })}
+  </div>
+</div>
+<script>window.onload = function() { setTimeout(function() { window.print(); }, 400); };<\/script>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank");
+    if (!win) {
+      alert("Popup blocked. Please allow popups for this site and try again.");
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+  }
 
   const [form, setForm] = useState({
     first_name: "", last_name: "", bio: "",
@@ -181,6 +279,28 @@ export default function PortfolioPage({ user }) {
     </div>
   );
 
+  // ── Tracer gate — must complete tracer study first ────────────────────────
+  if (!tracerDone) return (
+    <div className="fade-up">
+      <h1 className="page-title">My Portfolio</h1>
+      <div className="card" style={{ maxWidth:560, margin:"40px auto", textAlign:"center", padding:"48px 40px" }}>
+        <div style={{ fontSize:52, marginBottom:16 }}>🔒</div>
+        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:22, marginBottom:10 }}>
+          Complete the Tracer Study First
+        </div>
+        <p style={{ color:T.inkMuted, fontSize:13, lineHeight:1.7, marginBottom:28 }}>
+          Your portfolio and skill recommendations will be unlocked once you
+          submit the Graduate Tracer Study questionnaire. This only takes a few minutes
+          and your responses are kept strictly confidential.
+        </p>
+        <button className="btn btn-primary" style={{ fontSize:14, padding:"10px 28px" }}
+          onClick={() => onNavigate && onNavigate("tracer")}>
+          Go to Tracer Study →
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="fade-up">
       {/* ── Header ── */}
@@ -189,10 +309,19 @@ export default function PortfolioPage({ user }) {
           <h1 className="page-title">My Portfolio</h1>
           <p className="page-sub">Your professional profile and LDA-powered skills analysis</p>
         </div>
-        <button className="btn btn-secondary"
-          onClick={() => { setEditing(e => !e); setErr(null); setSuccess(null); }}>
-          {editing ? "✕ Cancel" : "✏ Edit Profile"}
-        </button>
+        <div style={{ display:"flex", gap:8 }}>
+          {!editing && (
+            <button className="btn btn-secondary" onClick={exportResumePDF}
+              disabled={!profile}
+              title="Download your profile as a resume PDF">
+              ⬇ Download Resume
+            </button>
+          )}
+          <button className="btn btn-secondary"
+            onClick={() => { setEditing(e => !e); setErr(null); setSuccess(null); }}>
+            {editing ? "✕ Cancel" : "✏ Edit Profile"}
+          </button>
+        </div>
       </div>
 
       {err     && <div className="alert alert-error">{err}</div>}
@@ -335,7 +464,7 @@ export default function PortfolioPage({ user }) {
           {/* ── Job Role Suggestions — below profile card ── */}
           {topJobSuggestions.length > 0 && (
             <div className="card" style={{ marginTop:20 }}>
-              <div className="card-title" style={{ marginBottom:6 }}>Possible Career Paths</div>
+              <div className="card-title" style={{ marginBottom:6 }}>💼 Possible Career Paths</div>
               <p style={{ fontSize:12, color:T.inkMuted, marginBottom:14, lineHeight:1.6 }}>
                 Based on your identified skill domains. These are suggested roles only — not job listings.
               </p>
@@ -366,7 +495,7 @@ export default function PortfolioPage({ user }) {
         {/* ── RIGHT: LDA Recommendations ── */}
         <div>
           <div className="card">
-            <div className="card-title">Skill Recommendations</div>
+            <div className="card-title">🎯 Skill Recommendations</div>
             <p style={{ fontSize:13, color:T.inkMuted, marginBottom:16, lineHeight:1.6 }}>
               Based on your <strong>{profile.program || "degree"}</strong>
               {profile.major && <> — <strong>{profile.major}</strong></>}
@@ -393,31 +522,26 @@ export default function PortfolioPage({ user }) {
 
             {!loadingRecs && recs && (
               <>
-                {/* Topic keyword cards */}
-                <div className="form-label" style={{ marginBottom:8, marginTop:20 }}>
-                  Top Skill Domains
-                </div>
-                {(recs.skill_topics || []).map((t, i) => (
-                  <div key={t.topic_id} style={{
-                    marginBottom:10, background:T.bg, borderRadius:8,
-                    padding:"10px 12px", border:`1px solid ${T.border}`,
-                    borderLeft:`3px solid ${TOPIC_COLORS[i % TOPIC_COLORS.length]}`,
-                  }}>
-                    <div style={{ display:"flex", justifyContent:"space-between",
-                      alignItems:"center", marginBottom:6 }}>
-                      <div style={{ fontWeight:600, fontSize:13,
-                        color:TOPIC_COLORS[i % TOPIC_COLORS.length] }}>{t.label}</div>
-                      <span style={{ fontSize:11, color:T.inkMuted }}>
-                        {Math.round(t.score * 100)}% relevance
-                      </span>
-                    </div>
-                    <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
-                      {(t.top_words || []).slice(0, 7).map(w => (
-                        <span key={w} className="pill pill-neutral">{w}</span>
-                      ))}
-                    </div>
+                {/* Radar chart */}
+                {radarData.length >= 3 && (
+                  <div style={{ marginBottom:24 }}>
+                    <div className="form-label" style={{ marginBottom:10 }}>Domain Radar</div>
+                    <RadarChart width={380} height={280} data={radarData}>
+                      <PolarGrid stroke={T.border} />
+                      <PolarAngleAxis dataKey="topic" tick={{ fontSize:11, fill:T.inkMuted }} />
+                      <PolarRadiusAxis angle={30} domain={[0,100]}
+                        tick={{ fontSize:9, fill:T.inkMuted }}
+                        tickFormatter={v => v + "%"} />
+                      <Radar name="Relevance" dataKey="score"
+                        fill={T.accent} fillOpacity={0.25}
+                        stroke={T.accent} strokeWidth={2}
+                        dot={{ fill:T.accent, r:4 }} />
+                      <Tooltip
+                        formatter={v => [`${v}%`, "Relevance"]}
+                        labelFormatter={(_,p) => p?.[0]?.payload?.full || ""} />
+                    </RadarChart>
                   </div>
-                ))}
+                )}
 
                 {/* ── Recommended Skills — technical & tool are clickable ── */}
                 <div className="form-label" style={{ marginBottom:10 }}>Recommended Skills</div>
@@ -486,7 +610,31 @@ export default function PortfolioPage({ user }) {
                     ));
                 })()}
 
-                
+                {/* Topic keyword cards */}
+                <div className="form-label" style={{ marginBottom:8, marginTop:20 }}>
+                  Top Skill Domains
+                </div>
+                {(recs.skill_topics || []).map((t, i) => (
+                  <div key={t.topic_id} style={{
+                    marginBottom:10, background:T.bg, borderRadius:8,
+                    padding:"10px 12px", border:`1px solid ${T.border}`,
+                    borderLeft:`3px solid ${TOPIC_COLORS[i % TOPIC_COLORS.length]}`,
+                  }}>
+                    <div style={{ display:"flex", justifyContent:"space-between",
+                      alignItems:"center", marginBottom:6 }}>
+                      <div style={{ fontWeight:600, fontSize:13,
+                        color:TOPIC_COLORS[i % TOPIC_COLORS.length] }}>{t.label}</div>
+                      <span style={{ fontSize:11, color:T.inkMuted }}>
+                        {Math.round(t.score * 100)}% relevance
+                      </span>
+                    </div>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                      {(t.top_words || []).slice(0, 7).map(w => (
+                        <span key={w} className="pill pill-neutral">{w}</span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </>
             )}
           </div>
