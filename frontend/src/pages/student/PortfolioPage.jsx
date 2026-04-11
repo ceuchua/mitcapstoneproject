@@ -152,8 +152,8 @@ export default function PortfolioPage({ user, onNavigate, tracerDone }) {
     <div class="name">${name}</div>
     ${job || program ? `<div class="headline">${[job, employer ? "at " + employer : ""].filter(Boolean).join(" ")}</div>` : ""}
     <div class="contact-row">
-      ${contact  ? "<span>\u{1F4DE} " + contact + "</span>" : ""}
-      ${linkedin ? "<span>\u{1F517} <a href='" + linkedin + "' target='_blank'>" + linkedin.replace(/^https?:\\/\\/(www\\.)?/, "") + "</a></span>" : ""}
+      ${contact  ? '<span>&#x1F4DE; ' + contact + '</span>' : ''}
+      ${linkedin ? '<span>&#x1F517; <a href="' + linkedin + '" target="_blank">' + linkedin.split("//").slice(1).join("//").replace(/^www\./, "") + '</a></span>' : ''}
     </div>
   </div>
   ${section("Professional Summary", bio ? "<p>" + bio + "</p>" : "")}
