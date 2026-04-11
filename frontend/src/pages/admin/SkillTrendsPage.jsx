@@ -1,163 +1,318 @@
 // pages/admin/SkillTrendsPage.jsx
-// LDA-powered industry skill trend analysis for admins
+// Skill trends dashboard — redesigned for non-technical admin users
 
 import { useState, useEffect } from "react";
 import { api } from "../../api";
 import { T } from "../../tokens";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  RadarChart, Radar, PolarGrid, PolarAngleAxis, Cell,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+  RadarChart, Radar, PolarGrid, PolarAngleAxis,
 } from "recharts";
 
+const DOMAIN_COLORS = [
+  T.accent, T.green, "#7C5CBF", "#1A8CA0", "#E07B39", "#B07D1A",
+  "#2D7A4F", "#B53A2F", "#555", "#1A8CA0",
+];
+
+function exportCSV(rows, filename) {
+  if (!rows?.length) return;
+  const headers = Object.keys(rows[0]);
+  const lines = [
+    headers.join(","),
+    ...rows.map(r => headers.map(h => `"${String(r[h] ?? "").replace(/"/g, '""')}"`).join(",")),
+  ];
+  const a = Object.assign(document.createElement("a"), {
+    href: URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" })),
+    download: filename,
+  });
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
 export default function SkillTrendsPage() {
-  const [trends, setTrends]       = useState(null);
-  const [topics, setTopics]       = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [retraining, setRetraining] = useState(false);
-  const [retResult, setRetResult] = useState(null);
-  const [tab, setTab]             = useState("domains");
+  const [trends,     setTrends]     = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [reloading,  setReloading]  = useState(false);
+  const [reloadMsg,  setReloadMsg]  = useState(null);
+  const [tab,        setTab]        = useState("domains");
+  const [loadedAt,   setLoadedAt]   = useState(null);
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     setLoading(true);
     try {
-      const [t, tp] = await Promise.all([api.getSkillTrends(), api.getLdaTopics()]);
+      const t = await api.getSkillTrends();
       setTrends(t);
-      setTopics(tp.topics || []);
+      setLoadedAt(new Date());
     } catch (e) {
       setTrends({ status: "error", message: e.message });
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }
 
-  async function retrain() {
-    setRetraining(true); setRetResult(null);
+  async function handleReload() {
+    setReloading(true); setReloadMsg(null);
     try {
       const r = await api.reloadModel();
-      setRetResult(r);
-      await load();
-    } catch (e) { setRetResult({ status: "error", reason: e.message }); }
-    finally { setRetraining(false); }
+      setReloadMsg({
+        ok: r.status === "ok",
+        text: r.status === "ok"
+          ? `Skill analysis model updated successfully — ${r.n_topics || ""} skill areas loaded.`
+          : "Model could not be updated. Please contact your system administrator.",
+      });
+      if (r.status === "ok") await load();
+    } catch (e) {
+      setReloadMsg({ ok: false, text: "Update failed: " + e.message });
+    } finally {
+      setReloading(false);
+    }
   }
 
-  function exportCSV(data, filename) {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+  function exportDomains() {
+    const rows = (trends?.top_skill_domains || []).map(d => ({
+      "Skill Area":  d.label,
+      "Prominence %": Math.round(d.prevalence * 100),
+      "Top Keywords": (d.top_words || []).slice(0, 6).join(", "),
+    }));
+    exportCSV(rows, "skill_areas.csv");
+  }
+
+  function exportSkills() {
+    const rows = (trends?.top_skills_overall || []).map(s => ({
+      "Skill":   s.skill,
+      "Mentions": s.count,
+    }));
+    exportCSV(rows, "top_skills.csv");
   }
 
   if (loading) return (
-    <div style={{ display: "flex", justifyContent: "center", padding: 80 }}>
-      <div className="spinner spinner-dark" style={{ width: 32, height: 32 }} />
+    <div style={{ display:"flex", justifyContent:"center", padding:80 }}>
+      <div className="spinner spinner-dark" style={{ width:32, height:32 }} />
     </div>
   );
 
-  const domainData = (trends?.top_skill_domains || []).map(d => ({
-    label: d.label.split(" & ")[0],
+  // ── Derived chart data ─────────────────────────────────────────────────────
+
+  const domainData = (trends?.top_skill_domains || []).map((d, i) => ({
+    label:      d.label.split(" & ")[0].split(" and ")[0],
+    full:       d.label,
     prevalence: Math.round(d.prevalence * 100),
-    full: d.label,
+    color:      DOMAIN_COLORS[i % DOMAIN_COLORS.length],
   }));
 
-  const skillData = (trends?.top_skills_overall || []).slice(0, 12)
-    .map(s => ({ skill: s.skill.length > 20 ? s.skill.slice(0, 18) + "…" : s.skill, count: s.count, full: s.skill }));
+  const skillData = (trends?.top_skills_overall || []).slice(0, 15).map(s => ({
+    skill: s.skill.length > 22 ? s.skill.slice(0, 20) + "…" : s.skill,
+    full:  s.skill,
+    count: s.count,
+  }));
 
   const radarData = domainData.slice(0, 6);
 
+  const nRecords   = trends?.n_records_analyzed ?? 0;
+  const nDomains   = trends?.top_skill_domains?.length ?? 0;
+  const nSkills    = trends?.top_skills_overall?.length ?? 0;
+  const topDomain  = trends?.top_skill_domains?.[0]?.label ?? null;
+
+  const hasData = trends?.status !== "no_data" && nRecords > 0;
+
   return (
     <div className="fade-up">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+
+      {/* ── Header ── */}
+      <div style={{ display:"flex", justifyContent:"space-between",
+        alignItems:"flex-start", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
-          <h1 className="page-title">Industry Skill Trends</h1>
-          <p className="page-sub">Domains, skills, and topics across all graduate employment records</p>
+          <h1 className="page-title">Graduate Skills Analysis</h1>
+          <p className="page-sub" style={{ marginBottom:0 }}>
+            What skill areas and competencies are most common among your graduates.
+            {loadedAt && (
+              <span style={{ marginLeft:8, fontSize:11 }}>
+                Last updated: {loadedAt.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
+              </span>
+            )}
+          </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => exportCSV(trends, "skill_trends.json")}>⬇ Export</button>
-          <button className="btn btn-primary btn-sm" onClick={retrain} disabled={retraining}>
-            {retraining ? <><div className="spinner" />Reloading…</> : "Reload Model"}
+        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <button className="btn btn-secondary btn-sm"
+            onClick={handleReload} disabled={reloading}
+            title="Refresh the skill analysis with the latest graduate data">
+            {reloading
+              ? <><div className="spinner" style={{ borderColor:"rgba(0,0,0,.15)", borderTopColor:T.accent }} />Updating…</>
+              : "🔄 Refresh Analysis"}
           </button>
         </div>
       </div>
 
-      {retResult && (
-        <div className={`alert ${retResult.status === "ok" ? "alert-success" : "alert-error"}`} style={{ marginBottom: 20 }}>
-          {retResult.status === "ok"
-            ? `✓ Model retrained on ${retResult.n_texts} job texts.`
-            : retResult.reason || "Retraining failed."}
+      {/* ── Reload result message ── */}
+      {reloadMsg && (
+        <div className={`alert ${reloadMsg.ok ? "alert-success" : "alert-error"}`}
+          style={{ marginBottom:20 }}>
+          {reloadMsg.text}
         </div>
       )}
 
-      {trends?.status === "no_data" ? (
-        <div className="card" style={{ textAlign: "center", padding: 60 }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>📭</div>
-          <h3 style={{ marginBottom: 8 }}>No Employment Data Yet</h3>
-          <p style={{ color: T.inkMuted, fontSize: 13, maxWidth: 400, margin: "0 auto" }}>
-            Industry skill trends will appear here once graduates complete the tracer study and submit employment information.
+      {/* ── No data state ── */}
+      {!hasData ? (
+        <div className="card" style={{ textAlign:"center", padding:60 }}>
+          <div style={{ fontSize:48, marginBottom:16 }}>📊</div>
+          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:20, marginBottom:8 }}>
+            No Skill Data Yet
+          </div>
+          <p style={{ color:T.inkMuted, fontSize:13, maxWidth:420, margin:"0 auto", lineHeight:1.7 }}>
+            Skill trends will appear here once graduates complete the tracer study and
+            submit their employment information. The analysis is generated automatically
+            from graduate responses.
           </p>
         </div>
       ) : (
         <>
-          {/* Summary stats */}
+          {/* ── Summary tiles ── */}
           <div className="grid-3 section">
-            {[
-              { label: "Records Analyzed", value: trends?.n_records_analyzed ?? 0,},
-              { label: "Skill Domains",    value: trends?.top_skill_domains?.length ?? 0,},
-              { label: "Unique Skills",    value: trends?.top_skills_overall?.length ?? 0,},
-            ].map(s => (
-              <div className="stat-tile" key={s.label}>
-                <div style={{ fontSize: 22, marginBottom: 6 }}>{s.icon}</div>
-                <div className="stat-value">{s.value}</div>
-                <div className="stat-label">{s.label}</div>
-              </div>
-            ))}
+            <div className="stat-tile">
+              <div style={{ fontSize:20, marginBottom:4 }}></div>
+              <div className="stat-value">{nRecords}</div>
+              <div className="stat-label">Graduate Responses Analyzed</div>
+            </div>
+            <div className="stat-tile">
+              <div style={{ fontSize:20, marginBottom:4 }}></div>
+              <div className="stat-value">{nDomains}</div>
+              <div className="stat-label">Skill Areas Identified</div>
+            </div>
+            <div className="stat-tile">
+              <div style={{ fontSize:20, marginBottom:4 }}></div>
+              <div className="stat-value">{nSkills}</div>
+              <div className="stat-label">Unique Skills Mentioned</div>
+            </div>
           </div>
 
+          {/* ── Insight sentence ── */}
+          {topDomain && (
+            <div style={{
+              background:T.surface, border:`1px solid ${T.border}`,
+              borderRadius:12, padding:"14px 18px", marginBottom:20,
+              fontSize:13, lineHeight:1.7,
+            }}>
+              📌 Based on <strong>{nRecords}</strong> graduate response{nRecords !== 1 ? "s" : ""},
+              the most prominent skill area among your graduates is{" "}
+              <strong style={{ color:T.accent }}>{topDomain}</strong>.
+              {nDomains > 1 && (
+                <> The analysis identified <strong>{nDomains}</strong> distinct skill areas across all employment records.</>
+              )}
+            </div>
+          )}
+
+          {/* ── Tabs ── */}
           <div className="tabs">
-            {["domains", "skills", "topics"].map(t => (
-              <div key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
-                {t.charAt(0).toUpperCase() + t.slice(1)}
+            {[
+              { id:"domains", label:"Skill Areas"   },
+              { id:"skills",  label:"Top Skills"    },
+            ].map(t => (
+              <div key={t.id}
+                className={`tab ${tab === t.id ? "active" : ""}`}
+                onClick={() => setTab(t.id)}>
+                {t.label}
               </div>
             ))}
           </div>
 
+          {/* ══ SKILL AREAS TAB ══════════════════════════════════════════════ */}
           {tab === "domains" && (
-            <div className="grid-2 section">
-              <div className="card">
-                <div className="card-title">Skill Domain Prevalence</div>
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={domainData} layout="vertical" margin={{ left: 10 }}>
-                    <XAxis type="number" tickFormatter={v => v + "%"} hide />
-                    <YAxis dataKey="label" type="category" width={140} tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={v => v + "%"} labelFormatter={(_, payload) => payload?.[0]?.payload?.full || ""} />
-                    <Bar dataKey="prevalence" fill={T.accent} radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+            <div className="section">
+              <div style={{ display:"flex", justifyContent:"space-between",
+                alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+                <p style={{ fontSize:13, color:T.inkMuted, maxWidth:560 }}>
+                  Skill areas are clusters of related competencies found across all graduate
+                  employment records. The percentage shows how prominent each area is
+                  relative to the others.
+                </p>
+                <button className="btn btn-secondary btn-sm" onClick={exportDomains}>
+                  ⬇ Export Skill Areas
+                </button>
               </div>
 
-              <div className="card">
-                <div className="card-title">Skill Domain Radar</div>
-                <ResponsiveContainer width="100%" height={280}>
-                  <RadarChart data={radarData}>
-                    <PolarGrid stroke={T.border} />
-                    <PolarAngleAxis dataKey="label" tick={{ fontSize: 10 }} />
-                    <Radar dataKey="prevalence" fill={T.accent} fillOpacity={0.25} stroke={T.accent} strokeWidth={2} />
-                    <Tooltip formatter={v => v + "%"} />
-                  </RadarChart>
-                </ResponsiveContainer>
+              <div className="grid-2">
+                {/* Bar chart */}
+                <div className="card">
+                  <div className="card-title">Skill Area Breakdown</div>
+                  {domainData.length === 0 ? (
+                    <div className="empty">No data yet</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={Math.max(200, domainData.length * 36 + 40)}>
+                      <BarChart data={domainData} layout="vertical"
+                        margin={{ left:4, right:40, top:4, bottom:4 }}>
+                        <XAxis type="number" tickFormatter={v => v + "%"}
+                          tick={{ fontSize:11 }} />
+                        <YAxis type="category" dataKey="label"
+                          width={135} tick={{ fontSize:11 }} />
+                        <Tooltip
+                          formatter={v => [v + "%", "Prominence"]}
+                          labelFormatter={(_, p) => p?.[0]?.payload?.full || ""} />
+                        <Bar dataKey="prevalence" radius={[0,4,4,0]} maxBarSize={22}>
+                          {domainData.map((d, i) => (
+                            <Cell key={i} fill={d.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+
+                {/* Radar */}
+                {radarData.length >= 3 && (
+                  <div className="card">
+                    <div className="card-title">Skill Area Distribution</div>
+                    <p style={{ fontSize:12, color:T.inkMuted, marginBottom:12 }}>
+                      Shows the relative balance of skill areas across all graduates.
+                    </p>
+                    <div style={{ display:"flex", justifyContent:"center" }}>
+                      <RadarChart width={320} height={260} data={radarData}>
+                        <PolarGrid stroke={T.border} />
+                        <PolarAngleAxis dataKey="label" tick={{ fontSize:10, fill:T.inkMuted }} />
+                        <Radar dataKey="prevalence" fill={T.accent} fillOpacity={0.25}
+                          stroke={T.accent} strokeWidth={2} />
+                        <Tooltip
+                          formatter={v => [v + "%", "Prominence"]}
+                          labelFormatter={(_, p) => p?.[0]?.payload?.full || ""} />
+                      </RadarChart>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Domain breakdown */}
-              <div className="card" style={{ gridColumn: "1/-1" }}>
-                <div className="card-title">Top Skills by Domain</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px,1fr))", gap: 12 }}>
-                  {(trends?.top_skill_domains || []).slice(0, 6).map(d => (
-                    <div key={d.topic_id} style={{ background: T.bg, borderRadius: 10, padding: "12px 14px", border: `1px solid ${T.border}` }}>
-                      <div style={{ fontWeight: 600, fontSize: 12, color: T.accent, marginBottom: 4 }}>
-                        {Math.round(d.prevalence * 100)}% prevalence
+              {/* Domain keyword cards */}
+              <div className="card" style={{ marginTop:20 }}>
+                <div className="card-title">What Each Skill Area Covers</div>
+                <p style={{ fontSize:12, color:T.inkMuted, marginBottom:16 }}>
+                  Each skill area is represented by the most frequently occurring keywords
+                  from graduate employment records.
+                </p>
+                <div style={{
+                  display:"grid",
+                  gridTemplateColumns:"repeat(auto-fill, minmax(250px, 1fr))",
+                  gap:12,
+                }}>
+                  {(trends?.top_skill_domains || []).map((d, i) => (
+                    <div key={d.topic_id} style={{
+                      background:T.bg, borderRadius:10,
+                      padding:"12px 14px",
+                      border:`1px solid ${T.border}`,
+                      borderLeft:`4px solid ${DOMAIN_COLORS[i % DOMAIN_COLORS.length]}`,
+                    }}>
+                      <div style={{ display:"flex", justifyContent:"space-between",
+                        alignItems:"center", marginBottom:6 }}>
+                        <div style={{ fontWeight:600, fontSize:13,
+                          color: DOMAIN_COLORS[i % DOMAIN_COLORS.length] }}>
+                          {d.label}
+                        </div>
+                        <span style={{ fontSize:11, color:T.inkMuted, fontWeight:600 }}>
+                          {Math.round(d.prevalence * 100)}%
+                        </span>
                       </div>
-                      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>{d.label}</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                        {d.top_words.slice(0, 6).map(w => (
-                          <span key={w} className="pill pill-neutral">{w}</span>
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                        {(d.top_words || []).slice(0, 7).map(w => (
+                          <span key={w} className="pill pill-neutral"
+                            style={{ fontSize:10 }}>{w}</span>
                         ))}
                       </div>
                     </div>
@@ -167,42 +322,50 @@ export default function SkillTrendsPage() {
             </div>
           )}
 
+          {/* ══ TOP SKILLS TAB ═══════════════════════════════════════════════ */}
           {tab === "skills" && (
             <div className="card section">
-              <div className="card-title">Most In-Demand Skills (All Industries)</div>
-              {skillData.length === 0
-                ? <div className="empty">No skill data yet.</div>
-                : <ResponsiveContainer width="100%" height={360}>
-                    <BarChart data={skillData} layout="vertical" margin={{ left: 20 }}>
-                      <XAxis type="number" hide />
-                      <YAxis dataKey="skill" type="category" width={160} tick={{ fontSize: 12 }} />
-                      <Tooltip labelFormatter={(_, payload) => payload?.[0]?.payload?.full || ""} />
-                      <Bar dataKey="count" fill={T.green} radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-              }
-            </div>
-          )}
-
-          {tab === "topics" && (
-            <div className="card section">
-              <div className="card-title">Current LDA Topic Vocabulary</div>
-              <p style={{ fontSize: 13, color: T.inkMuted, marginBottom: 16 }}>
-                These are the skill clusters the LDA model has learned. After retraining on real data, review and relabel these topics in <code>lda_model.py</code>.
-              </p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px,1fr))", gap: 12 }}>
-                {topics.map(t => (
-                  <div key={t.topic_id} style={{ background: T.bg, borderRadius: 10, padding: "12px 14px", border: `1px solid ${T.border}` }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{t.label}</div>
-                      <span className="pill pill-neutral">#{t.topic_id}</span>
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                      {t.top_words.slice(0, 7).map(w => <span key={w} className="pill pill-neutral">{w}</span>)}
-                    </div>
+              <div style={{ display:"flex", justifyContent:"space-between",
+                alignItems:"flex-start", marginBottom:14, flexWrap:"wrap", gap:10 }}>
+                <div>
+                  <div className="card-title" style={{ marginBottom:4 }}>
+                    Most Commonly Mentioned Skills
                   </div>
-                ))}
+                  <p style={{ fontSize:12, color:T.inkMuted }}>
+                    Skills most frequently selected or written by graduates in their
+                    tracer study responses, ranked by how many graduates mentioned them.
+                  </p>
+                </div>
+                <button className="btn btn-secondary btn-sm" onClick={exportSkills}>
+                  ⬇ Export Skills List
+                </button>
               </div>
+
+              {skillData.length === 0 ? (
+                <div className="empty">
+                  No skill data yet. Skills will appear once graduates submit their responses.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%"
+                  height={Math.max(200, skillData.length * 36 + 50)}>
+                  <BarChart data={skillData} layout="vertical"
+                    margin={{ left:8, right:48, top:4, bottom:4 }}>
+                    <XAxis type="number" allowDecimals={false}
+                      tick={{ fontSize:11 }} />
+                    <YAxis type="category" dataKey="skill"
+                      width={165} tick={{ fontSize:11 }} />
+                    <Tooltip
+                      formatter={v => [v, "Graduates mentioned"]}
+                      labelFormatter={(_, p) => p?.[0]?.payload?.full || ""} />
+                    <Bar dataKey="count" radius={[0,4,4,0]} maxBarSize={22}>
+                      {skillData.map((_, i) => (
+                        <Cell key={i}
+                          fill={i === 0 ? T.accent : i < 3 ? "#A52932" : T.green} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           )}
         </>
