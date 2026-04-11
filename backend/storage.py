@@ -1236,8 +1236,9 @@ def delete_response(response_id: str) -> bool:
 def compute_stats() -> dict:
     from skill_parser import parse_skills_from_responses
 
-    users     = [u for u in _read(USERS_FILE) if u.get("role") == "student"]
-    responses = _read(RESPONSES_FILE)
+    # Use the abstracted functions so this works in both JSON and MongoDB mode
+    users     = list_users(role="student")
+    responses = read_all_responses()
     questions = read_questions()
 
     # ── Role-based answer lookup (flex against admin edits) ───────────────────
