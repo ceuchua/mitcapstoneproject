@@ -307,7 +307,7 @@ export default function PortfolioPage({ user, onNavigate, tracerDone }) {
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom: 20 }}>
         <div>
           <h1 className="page-title">My Portfolio</h1>
-          <p className="page-sub">Your professional profile and LDA-powered skills analysis</p>
+          <p className="page-sub">Your professional profile</p>
         </div>
         <div style={{ display:"flex", gap:8 }}>
           {!editing && (
@@ -464,7 +464,7 @@ export default function PortfolioPage({ user, onNavigate, tracerDone }) {
           {/* ── Job Role Suggestions — below profile card ── */}
           {topJobSuggestions.length > 0 && (
             <div className="card" style={{ marginTop:20 }}>
-              <div className="card-title" style={{ marginBottom:6 }}>💼 Possible Career Paths</div>
+              <div className="card-title" style={{ marginBottom:6 }}>Possible Career Paths</div>
               <p style={{ fontSize:12, color:T.inkMuted, marginBottom:14, lineHeight:1.6 }}>
                 Based on your identified skill domains. These are suggested roles only — not job listings.
               </p>
@@ -495,11 +495,11 @@ export default function PortfolioPage({ user, onNavigate, tracerDone }) {
         {/* ── RIGHT: LDA Recommendations ── */}
         <div>
           <div className="card">
-            <div className="card-title">🎯 Skill Recommendations</div>
+            <div className="card-title">Skill Recommendations</div>
             <p style={{ fontSize:13, color:T.inkMuted, marginBottom:16, lineHeight:1.6 }}>
               Based on your <strong>{profile.program || "degree"}</strong>
               {profile.major && <> — <strong>{profile.major}</strong></>}
-              , the LDA model identifies the most relevant skill domains.
+              , here are the most relevant skill domains.
             </p>
 
             {loadingRecs && (
@@ -515,33 +515,38 @@ export default function PortfolioPage({ user, onNavigate, tracerDone }) {
 
             {!loadingRecs && !recsError && !recs && (
               <div className="empty">
-                <div className="empty-icon">🎓</div>
+                <div className="empty-icon"></div>
                 <div>Set your degree program in your profile to get recommendations.</div>
               </div>
             )}
 
             {!loadingRecs && recs && (
               <>
-                {/* Radar chart */}
-                {radarData.length >= 3 && (
-                  <div style={{ marginBottom:24 }}>
-                    <div className="form-label" style={{ marginBottom:10 }}>Domain Radar</div>
-                    <RadarChart width={380} height={280} data={radarData}>
-                      <PolarGrid stroke={T.border} />
-                      <PolarAngleAxis dataKey="topic" tick={{ fontSize:11, fill:T.inkMuted }} />
-                      <PolarRadiusAxis angle={30} domain={[0,100]}
-                        tick={{ fontSize:9, fill:T.inkMuted }}
-                        tickFormatter={v => v + "%"} />
-                      <Radar name="Relevance" dataKey="score"
-                        fill={T.accent} fillOpacity={0.25}
-                        stroke={T.accent} strokeWidth={2}
-                        dot={{ fill:T.accent, r:4 }} />
-                      <Tooltip
-                        formatter={v => [`${v}%`, "Relevance"]}
-                        labelFormatter={(_,p) => p?.[0]?.payload?.full || ""} />
-                    </RadarChart>
+{/* Topic keyword cards */}
+                <div className="form-label" style={{ marginBottom:8, marginTop:20 }}>
+                  Top Skill Domains
+                </div>
+                {(recs.skill_topics || []).map((t, i) => (
+                  <div key={t.topic_id} style={{
+                    marginBottom:10, background:T.bg, borderRadius:8,
+                    padding:"10px 12px", border:`1px solid ${T.border}`,
+                    borderLeft:`3px solid ${TOPIC_COLORS[i % TOPIC_COLORS.length]}`,
+                  }}>
+                    <div style={{ display:"flex", justifyContent:"space-between",
+                      alignItems:"center", marginBottom:6 }}>
+                      <div style={{ fontWeight:600, fontSize:13,
+                        color:TOPIC_COLORS[i % TOPIC_COLORS.length] }}>{t.label}</div>
+                      <span style={{ fontSize:11, color:T.inkMuted }}>
+                        {Math.round(t.score * 100)}% relevance
+                      </span>
+                    </div>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                      {(t.top_words || []).slice(0, 7).map(w => (
+                        <span key={w} className="pill pill-neutral">{w}</span>
+                      ))}
+                    </div>
                   </div>
-                )}
+                ))}
 
                 {/* ── Recommended Skills — technical & tool are clickable ── */}
                 <div className="form-label" style={{ marginBottom:10 }}>Recommended Skills</div>
@@ -609,32 +614,6 @@ export default function PortfolioPage({ user, onNavigate, tracerDone }) {
                       </div>
                     ));
                 })()}
-
-                {/* Topic keyword cards */}
-                <div className="form-label" style={{ marginBottom:8, marginTop:20 }}>
-                  Top Skill Domains
-                </div>
-                {(recs.skill_topics || []).map((t, i) => (
-                  <div key={t.topic_id} style={{
-                    marginBottom:10, background:T.bg, borderRadius:8,
-                    padding:"10px 12px", border:`1px solid ${T.border}`,
-                    borderLeft:`3px solid ${TOPIC_COLORS[i % TOPIC_COLORS.length]}`,
-                  }}>
-                    <div style={{ display:"flex", justifyContent:"space-between",
-                      alignItems:"center", marginBottom:6 }}>
-                      <div style={{ fontWeight:600, fontSize:13,
-                        color:TOPIC_COLORS[i % TOPIC_COLORS.length] }}>{t.label}</div>
-                      <span style={{ fontSize:11, color:T.inkMuted }}>
-                        {Math.round(t.score * 100)}% relevance
-                      </span>
-                    </div>
-                    <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
-                      {(t.top_words || []).slice(0, 7).map(w => (
-                        <span key={w} className="pill pill-neutral">{w}</span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
               </>
             )}
           </div>
