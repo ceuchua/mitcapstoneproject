@@ -126,6 +126,9 @@ export default function TracerStudyPage({ user, onNavigate, onTracerComplete }) 
   const [submitted, setSubmitted] = useState(false);
   const [err,       setErr]       = useState(null);
 
+  // University is locked to MSEUF for all respondents
+  const UNIVERSITY = "Manuel S. Enverga University Foundation";
+
   useEffect(() => {
     async function load() {
       setLoading(true);
@@ -135,9 +138,35 @@ export default function TracerStudyPage({ user, onNavigate, onTracerComplete }) 
           api.getMyResponse(),
         ]);
         if (qs.status === "fulfilled") setQuestions(qs.value);
+
         if (ex.status === "fulfilled") {
+          // Returning student — restore saved answers
           setExisting(ex.value);
-          setAnswers(ex.value.answers || {});
+          const saved = ex.value.answers || {};
+          // Always enforce university lock even on existing responses
+          saved.q_edu_university = UNIVERSITY;
+          setAnswers(saved);
+        } else {
+          // First-time student — pre-fill from profile, don't overwrite anything
+          const prefilled = {};
+
+          // Build degree+specialization string from program and major
+          if (user?.program) {
+            const degreeSpec = user.major
+              ? `${user.program}, major in ${user.major}`
+              : user.program;
+            prefilled.q_edu_degree_spec = degreeSpec;
+          }
+
+          // Graduation year
+          if (user?.graduation_year) {
+            prefilled.q_edu_year_grad = String(user.graduation_year);
+          }
+
+          // University — always locked to MSEUF
+          prefilled.q_edu_university = UNIVERSITY;
+
+          setAnswers(prefilled);
         }
       } finally { setLoading(false); }
     }
@@ -283,6 +312,13 @@ export default function TracerStudyPage({ user, onNavigate, onTracerComplete }) 
                 question={q}
                 value={answers[q.question_id]}
                 onChange={v => setAnswer(q.question_id, v)}
+                locked={q.question_id === "q_edu_university"}
+                prefillNote={
+                  q.question_id === "q_edu_degree_spec" ||
+                  q.question_id === "q_edu_year_grad"
+                    ? "Pre-filled from your profile — please verify and edit if needed."
+                    : null
+                }
               />
             ))}
           </div>
@@ -315,18 +351,44 @@ export default function TracerStudyPage({ user, onNavigate, onTracerComplete }) 
 
 // ── Individual question renderer ──────────────────────────────────────────────
 
-function QuestionField({ question: q, value, onChange }) {
+function QuestionField({ question: q, value, onChange, locked, prefillNote }) {
   const req = q.required;
 
   const labelEl = (
     <label className="form-label" style={{ marginBottom:8 }}>
       {q.text} {req && <span style={{ color:T.red }}>*</span>}
+      {locked && (
+        <span style={{ marginLeft:8, fontSize:11, color:T.inkMuted,
+          fontWeight:400, fontStyle:"italic" }}>
+          🔒 Fixed for all MSEUF graduates
+        </span>
+      )}
     </label>
+  );
+
+  // Locked field — read-only display, cannot be edited
+  if (locked) return (
+    <div className="form-group">
+      {labelEl}
+      <div style={{
+        padding:"10px 12px", borderRadius:8, fontSize:13,
+        background:"#F4F2EF", border:"1px solid #E4DDD3",
+        color:"#1A1714", fontWeight:500,
+      }}>
+        {value || ""}
+      </div>
+    </div>
   );
 
   if (q.type === "text") return (
     <div className="form-group">
       {labelEl}
+      {prefillNote && (
+        <div style={{ fontSize:11, color:"#7A7168", marginBottom:6,
+          display:"flex", alignItems:"center", gap:4 }}>
+          <span>✏</span> {prefillNote}
+        </div>
+      )}
       <textarea className="form-textarea" style={{ minHeight:70 }} value={value || ""}
         onChange={e => onChange(e.target.value)} placeholder="Your answer…" />
     </div>
@@ -358,6 +420,12 @@ function QuestionField({ question: q, value, onChange }) {
   if (q.type === "number") return (
     <div className="form-group">
       {labelEl}
+      {prefillNote && (
+        <div style={{ fontSize:11, color:"#7A7168", marginBottom:6,
+          display:"flex", alignItems:"center", gap:4 }}>
+          <span>✏</span> {prefillNote}
+        </div>
+      )}
       <input className="form-input" type="number" min={0} value={value || ""}
         onChange={e => onChange(e.target.value)} style={{ maxWidth:160 }} />
     </div>

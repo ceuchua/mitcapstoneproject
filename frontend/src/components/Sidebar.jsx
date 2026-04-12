@@ -108,10 +108,6 @@ export default function Sidebar({ page, setPage, user, healthy, tracerDone, onLo
             <strong>{user?.first_name} {user?.last_name}</strong>
             {user?.email}
           </div>
-          <div style={{ fontSize: 11, color: "#fff", marginBottom: 10 }}>
-            <span className="status-dot" style={{ background: healthy ? "#3ecf6b" : "#e05a5a" }} />
-            {healthy ? "API Connected" : "API Offline"}
-          </div>
           <button className="btn btn-signout btn-sm" onClick={onLogout}
             style={{width: "100%" }}>
             Sign Out
