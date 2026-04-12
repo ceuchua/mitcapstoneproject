@@ -816,6 +816,23 @@ class NMFSkillsAnalyzer:
         else:
             self._feature_names = self.vectorizer.get_feature_names_out()
 
+        # Restore idf_ weights if the vectorizer lost its fitted state due to a
+        # sklearn version mismatch during unpickling. The idf_ array is exported
+        # from the Colab bundle and restored here so transform() works correctly.
+        if not hasattr(self.vectorizer, "idf_") or self.vectorizer.idf_ is None:
+            idf_list = pipeline.get("idf_")
+            if idf_list is not None:
+                self.vectorizer.idf_ = np.array(idf_list, dtype=np.float64)
+                logger.info("Restored idf_ from bundle (%d values).", len(idf_list))
+            else:
+                logger.error(
+                    "Vectorizer idf_ is missing and not in bundle. "
+                    "Re-export lda_model.joblib with idf_ included — "
+                    "add: \'idf_\': best_vectorizer.idf_.tolist() to the model_bundle dict. "
+                    "skill-trends will be disabled until the model is re-exported."
+                )
+                return  # abort load — model unusable without idf_
+
         # Pre-computed top words per topic (list of lists, index = topic)
         self._top_words = pipeline.get("top_words")
 
