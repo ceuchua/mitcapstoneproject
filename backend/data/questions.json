@@ -71,8 +71,8 @@
     "protected": false,
     "enabled": true,
     "section": "General Information",
-    "text": "Birthday (Month / Day / Year)",
-    "type": "text",
+    "text": "Birthday",
+    "type": "date",
     "options": null,
     "required": false,
     "order": 4
@@ -261,42 +261,6 @@
     "order": 11
   },
   {
-    "question_id": "q_prof_exam_name",
-    "semantic_role": null,
-    "protected": false,
-    "enabled": true,
-    "section": "Educational Background",
-    "text": "Name of Professional Examination Passed — e.g. Licensure Examination for Teachers (LET)",
-    "type": "text",
-    "options": null,
-    "required": false,
-    "order": 12
-  },
-  {
-    "question_id": "q_prof_exam_date",
-    "semantic_role": null,
-    "protected": false,
-    "enabled": true,
-    "section": "Educational Background",
-    "text": "Date Taken — e.g. March 2023",
-    "type": "text",
-    "options": null,
-    "required": false,
-    "order": 13
-  },
-  {
-    "question_id": "q_prof_exam_rating",
-    "semantic_role": null,
-    "protected": false,
-    "enabled": true,
-    "section": "Educational Background",
-    "text": "Rating or Score — e.g. 81.25%",
-    "type": "text",
-    "options": null,
-    "required": false,
-    "order": 14
-  },
-  {
     "question_id": "q_course_reason",
     "semantic_role": null,
     "protected": false,
@@ -363,50 +327,71 @@
       }
     ],
     "required": false,
-    "order": 15
+    "order": 12
+  },
+  {
+    "question_id": "q_has_training",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Training & Professional Development",
+    "text": "Have you attended any training program or advance study after college?",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "yes",
+        "label": "Yes"
+      },
+      {
+        "id": "no",
+        "label": "No"
+      }
+    ],
+    "required": false,
+    "order": 13
   },
   {
     "question_id": "q_training_title",
     "semantic_role": null,
     "protected": false,
     "enabled": true,
-    "section": "Training and Advance Studies",
+    "section": "Training & Professional Development",
     "text": "Title of Training Program or Advance Study attended after college",
     "type": "text",
     "options": null,
     "required": false,
-    "order": 16
+    "order": 14
   },
   {
     "question_id": "q_training_duration",
     "semantic_role": null,
     "protected": false,
     "enabled": true,
-    "section": "Training and Advance Studies",
+    "section": "Training & Professional Development",
     "text": "Duration and Credits Earned — e.g. 3 days, 24 hours, 3 units",
     "type": "text",
     "options": null,
     "required": false,
-    "order": 17
+    "order": 15
   },
   {
     "question_id": "q_training_institution",
     "semantic_role": null,
     "protected": false,
     "enabled": true,
-    "section": "Training and Advance Studies",
+    "section": "Training & Professional Development",
     "text": "Name of Training Institution, College, or University",
     "type": "text",
     "options": null,
     "required": false,
-    "order": 18
+    "order": 16
   },
   {
     "question_id": "q_advance_reason",
     "semantic_role": null,
     "protected": false,
     "enabled": true,
-    "section": "Training and Advance Studies",
+    "section": "Training & Professional Development",
     "text": "What made you pursue advance studies?",
     "type": "single_choice",
     "options": [
@@ -424,7 +409,40 @@
       }
     ],
     "required": false,
+    "order": 17
+  },
+  {
+    "question_id": "q_has_certifications",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Training & Professional Development",
+    "text": "Have you passed any professional licensure or certification examination?",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "yes",
+        "label": "Yes"
+      },
+      {
+        "id": "no",
+        "label": "No"
+      }
+    ],
+    "required": false,
     "order": 19
+  },
+  {
+    "question_id": "q_prof_exam_name",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Training & Professional Development",
+    "text": "Name of Professional Examination Passed — e.g. Licensure Examination for Teachers (LET)",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 20
   },
   {
     "question_id": "q_emp_status",
@@ -450,6 +468,18 @@
     ],
     "required": true,
     "order": 20
+  },
+  {
+    "question_id": "q_prof_exam_date",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Training & Professional Development",
+    "text": "Date Taken (Month and Year) — e.g. March 2023",
+    "type": "month",
+    "options": null,
+    "required": false,
+    "order": 21
   },
   {
     "question_id": "q_unemployment_reason",
@@ -487,6 +517,18 @@
     ],
     "required": false,
     "order": 21
+  },
+  {
+    "question_id": "q_prof_exam_rating",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": true,
+    "section": "Training & Professional Development",
+    "text": "Rating or Score — e.g. 81.25%",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 22
   },
   {
     "question_id": "q_emp_type",
@@ -1174,5 +1216,38 @@
     ],
     "required": false,
     "order": 42
+  },
+  {
+    "section": "Further Studies",
+    "text": "Do you plan to pursue a post-graduate degree?",
+    "type": "single_choice",
+    "options": [
+      {
+        "id": "opt_a",
+        "label": "Yes"
+      },
+      {
+        "id": "opt_b",
+        "label": "No"
+      }
+    ],
+    "required": true,
+    "order": 43,
+    "question_id": "q_45683892",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": false
+  },
+  {
+    "section": "Further Studies",
+    "text": "If yes, which university do you plan in enrolling?",
+    "type": "text",
+    "options": null,
+    "required": false,
+    "order": 44,
+    "question_id": "q_eadacd2b",
+    "semantic_role": null,
+    "protected": false,
+    "enabled": false
   }
 ]

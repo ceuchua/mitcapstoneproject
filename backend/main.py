@@ -394,6 +394,17 @@ def lda_topics():
     return {"topics": lda_analyzer.topic_summary()}
 
 
+@app.get("/api/lda/market-skills", tags=["LDA"])
+def market_skills(authorization: Optional[str] = Header(None)):
+    """
+    Admin: return in-demand skill clusters derived from the model's
+    training corpus of Philippine job postings (NewMergedData.csv).
+    This reflects what employers looked for — not graduate self-report data.
+    """
+    _require_admin(authorization)
+    return lda_analyzer.market_skill_trends()
+
+
 # ── Employment Records (admin view) ───────────────────────────────────────────
 
 @app.get("/api/employment/me", tags=["Employment"])
@@ -429,11 +440,10 @@ def skill_trends_from_responses(authorization: Optional[str] = Header(None)):
     _require_admin(authorization)
     questions = read_questions()
     responses = read_all_responses()
-    # Collect all job description + skills text per response (role-based)
-    # Build option label maps for multi_choice semantic-role questions
+    # Build option label map for skills_free_text (multi_choice)
     q_map = {q.get("semantic_role"): q for q in questions if q.get("semantic_role")}
     def _opt_label(q_obj, val):
-        """Resolve a single_choice/multi_choice answer value to human-readable text."""
+        """Resolve a multi_choice answer list to human-readable skill labels."""
         if not q_obj or not val:
             return ""
         opts = {o["id"]: o["label"] for o in (q_obj.get("options") or [])}
@@ -444,8 +454,13 @@ def skill_trends_from_responses(authorization: Optional[str] = Header(None)):
     job_texts = []
     for r in responses:
         ans   = r.get("answers", {})
+        # Option A: feed only skills_free_text + job_description (curriculum suggestions).
+        # job_title (PSOC category) is intentionally excluded — its label text
+        # ("Technicians and Associate Professionals", "Service Workers") contains
+        # generic words (service, support, care) that the NMF model trained on
+        # Philippine job postings associates with the Healthcare cluster, producing
+        # misleading topic scores for IT and business graduates.
         parts = [
-            _opt_label(q_map.get("job_title"),       get_answer_by_role(ans, "job_title")),
             get_answer_by_role(ans, "job_description") or "",
             _opt_label(q_map.get("skills_free_text"), get_answer_by_role(ans, "skills_free_text")),
         ]

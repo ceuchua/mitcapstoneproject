@@ -93,6 +93,7 @@ export const api = {
   getRecommendations: (program, major = "") =>
     request("GET", `/api/lda/recommend?program=${encodeURIComponent(program)}&major=${encodeURIComponent(major)}`),
   getSkillTrends:     () => request("GET",  "/api/lda/skill-trends"),
+  getMarketSkills:    () => request("GET",  "/api/lda/market-skills"),
   reloadModel:        () => request("POST", "/api/lda/reload"),
   getLdaTopics:       () => request("GET",  "/api/lda/topics"),
 

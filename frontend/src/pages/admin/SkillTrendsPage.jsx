@@ -30,6 +30,7 @@ function exportCSV(rows, filename) {
 
 export default function SkillTrendsPage() {
   const [trends,     setTrends]     = useState(null);
+  const [market,     setMarket]     = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [reloading,  setReloading]  = useState(false);
   const [reloadMsg,  setReloadMsg]  = useState(null);
@@ -41,8 +42,12 @@ export default function SkillTrendsPage() {
   async function load() {
     setLoading(true);
     try {
-      const t = await api.getSkillTrends();
+      const [t, m] = await Promise.all([
+        api.getSkillTrends(),
+        api.getMarketSkills().catch(() => null),
+      ]);
       setTrends(t);
+      setMarket(m);
       setLoadedAt(new Date());
     } catch (e) {
       setTrends({ status: "error", message: e.message });
@@ -95,7 +100,7 @@ export default function SkillTrendsPage() {
   // ── Derived chart data ─────────────────────────────────────────────────────
 
   const domainData = (trends?.top_skill_domains || []).map((d, i) => ({
-    label:      d.label.split(" & ")[0].split(" and ")[0],
+    label:      d.label.split(/[,&]/)[0].trim().split(" ").slice(0,2).join(" "),
     full:       d.label,
     prevalence: Math.round(d.prevalence * 100),
     color:      DOMAIN_COLORS[i % DOMAIN_COLORS.length],
@@ -139,7 +144,7 @@ export default function SkillTrendsPage() {
             title="Refresh the skill analysis with the latest graduate data">
             {reloading
               ? <><div className="spinner" style={{ borderColor:"rgba(0,0,0,.15)", borderTopColor:T.accent }} />Updating…</>
-              : "🔄 Refresh Analysis"}
+              : "Refresh Analysis"}
           </button>
         </div>
       </div>
@@ -205,8 +210,9 @@ export default function SkillTrendsPage() {
           {/* ── Tabs ── */}
           <div className="tabs">
             {[
-              { id:"domains", label:"Skill Areas"   },
-              { id:"skills",  label:"Top Skills"    },
+              { id:"domains", label:"Skill Areas"       },
+              { id:"skills",  label:"Top Skills"         },
+              { id:"market",  label:"In-Demand Job Skills" },
             ].map(t => (
               <div key={t.id}
                 className={`tab ${tab === t.id ? "active" : ""}`}
@@ -236,7 +242,7 @@ export default function SkillTrendsPage() {
                 <div className="card">
                   <div className="card-title">Skill Area Breakdown</div>
                   {domainData.length === 0 ? (
-                    <div className="empty">No data yet</div>
+                    <div className="empty"><div className="empty-icon"></div>No data yet</div>
                   ) : (
                     <ResponsiveContainer width="100%" height={Math.max(200, domainData.length * 36 + 40)}>
                       <BarChart data={domainData} layout="vertical"
@@ -343,6 +349,7 @@ export default function SkillTrendsPage() {
 
               {skillData.length === 0 ? (
                 <div className="empty">
+                  <div className="empty-icon"></div>
                   No skill data yet. Skills will appear once graduates submit their responses.
                 </div>
               ) : (
@@ -368,6 +375,127 @@ export default function SkillTrendsPage() {
               )}
             </div>
           )}
+
+          {/* ══ JOB MARKET TAB ═════════════════════════════════════════════ */}
+          {tab === "market" && (
+            <div className="section">
+
+              {/* Disclaimer banner */}
+              <div style={{
+                background:"#FBF2DC", border:"1px solid #B07D1A",
+                borderRadius:10, padding:"12px 16px", marginBottom:20,
+                fontSize:12, color:"#5a4000", lineHeight:1.7,
+              }}>
+                <strong>📌 About this data:</strong> The skill clusters and keywords below
+                are derived from the approximately 13,000 Philippine
+                job postings. They represent skills that employers mentioned most frequently
+                across different industries — not real-time job board data.
+              </div>
+
+              {!market || market.status === "no_model" ? (
+                <div className="card empty" style={{ padding:60 }}>
+                  <div className="empty-icon"></div>
+                  <div style={{ fontWeight:600, marginBottom:8 }}>
+                    Skill analysis model not loaded
+                  </div>
+                  <p style={{ fontSize:13, color:T.inkMuted, maxWidth:380, margin:"0 auto" }}>
+                    The job market skill data comes from the trained model.
+                    Use the Refresh Analysis button above to load it.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Top in-demand skills bar chart */}
+                  <div className="card" style={{ marginBottom:20 }}>
+                    <div className="card-title">Most In-Demand Skills Across Philippine Jobs</div>
+                    <p style={{ fontSize:12, color:T.inkMuted, marginBottom:16 }}>
+                      Skills that appeared most broadly across all job domains in the training dataset,
+                      ranked by how consistently they were mentioned across different industries.
+                    </p>
+                    {(market.top_indemand || []).length === 0 ? (
+                      <div className="empty">No data available.</div>
+                    ) : (
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                        {(market.top_indemand || []).map((s, i) => (
+                          <div key={s.skill} style={{
+                            display:"flex", alignItems:"center", gap:8,
+                            background: i < 3 ? T.accentSoft : T.bg,
+                            border:`1px solid ${i < 3 ? T.accent : T.border}`,
+                            borderRadius:8, padding:"6px 12px",
+                          }}>
+                            <span style={{
+                              fontSize:11, fontWeight:700,
+                              color: i < 3 ? T.accent : T.inkMuted,
+                              minWidth:18, textAlign:"center",
+                            }}>
+                              {i + 1}
+                            </span>
+                            <span style={{
+                              fontSize:13, fontWeight: i < 3 ? 700 : 500,
+                              color: T.ink, textTransform:"capitalize",
+                            }}>
+                              {s.skill}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Skill clusters from job postings */}
+                  <div className="card">
+                    <div className="card-title">Job Market Skill Clusters</div>
+                    <p style={{ fontSize:12, color:T.inkMuted, marginBottom:16 }}>
+                      Each cluster below represents a group of related skills that
+                      Philippine employers commonly require together. The percentage
+                      shows how prominent that cluster is across all job postings analyzed.
+                    </p>
+                    <div style={{
+                      display:"grid",
+                      gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))",
+                      gap:12,
+                    }}>
+                      {(market.skill_clusters || []).map((c, i) => (
+                        <div key={c.topic_id} style={{
+                          background:T.bg, borderRadius:10,
+                          padding:"12px 14px",
+                          border:`1px solid ${T.border}`,
+                          borderLeft:`4px solid ${DOMAIN_COLORS[i % DOMAIN_COLORS.length]}`,
+                        }}>
+                          <div style={{ display:"flex", justifyContent:"space-between",
+                            alignItems:"center", marginBottom:8 }}>
+                            <div style={{
+                              fontWeight:700, fontSize:13,
+                              color:DOMAIN_COLORS[i % DOMAIN_COLORS.length],
+                            }}>
+                              {c.label}
+                            </div>
+                            <span style={{ fontSize:11, color:T.inkMuted, fontWeight:600 }}>
+                              {Math.round(c.prominence * 100)}%
+                            </span>
+                          </div>
+                          <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                            {(c.top_skills || []).map(w => (
+                              <span key={w} className="pill pill-topic"
+                                style={{ fontSize:10, textTransform:"capitalize" }}>
+                                {w}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop:16, fontSize:11, color:T.inkMuted, fontStyle:"italic" }}>
+                      Model trained on {market.n_features?.toLocaleString() || "—"} unique
+                      skill terms across {market.n_topics || "—"} job market domains.
+                      Source: {market.model_source || "Philippine job postings"}.
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
         </>
       )}
     </div>

@@ -15,60 +15,63 @@ const TOPIC_COLORS = [
 
 // ── Job role suggestions per LDA topic label (non-clickable, visual only) ──
 // Keys match the exact topic_labels strings from lda_model.joblib.
+// Keys MUST match NMF_TOPIC_LABELS in lda_model.py exactly.
+// Topic 1 (General Employment) is a noise topic — intentionally omitted.
 const JOB_SUGGESTIONS = {
-  "Healthcare and Medical": [
-    { title: "Registered Nurse",         desc: "Patient care, clinical documentation, health assessment" },
-    { title: "Medical Technologist",      desc: "Laboratory analysis, diagnostic testing, specimen processing" },
-    { title: "Physical Therapist",        desc: "Rehabilitation programs, patient recovery, therapeutic exercises" },
-    { title: "Health Information Manager",desc: "Medical records, health data management, compliance" },
-    { title: "Pharmacist",                desc: "Drug dispensing, patient counseling, medication management" },
+  "Information Technology & Security": [
+    { title: "Software Developer",      desc: "Application development, coding, system design" },
+    { title: "Cybersecurity Analyst",   desc: "Threat monitoring, vulnerability assessment, incident response" },
+    { title: "Network Administrator",   desc: "Network infrastructure, server management, IT support" },
+    { title: "Systems Analyst",         desc: "Requirements analysis, system design, process documentation" },
+    { title: "Web Developer",           desc: "Frontend/backend development, UI design, database integration" },
   ],
-  "Business Governance": [
-    { title: "Compliance Officer",  desc: "Regulatory compliance, policy implementation, risk monitoring" },
-    { title: "Internal Auditor",    desc: "Financial audits, process review, risk assessment" },
-    { title: "Corporate Secretary", desc: "Board governance, legal compliance, corporate records" },
-    { title: "Operations Manager",  desc: "Business operations, process improvement, team supervision" },
-    { title: "Management Analyst",  desc: "Organizational efficiency, workflow optimization, reporting" },
-  ],
-  "Information Technology": [
-    { title: "Software Developer",    desc: "Application development, coding, system design" },
-    { title: "IT Support Specialist", desc: "Technical troubleshooting, hardware/software support, helpdesk" },
-    { title: "Network Administrator", desc: "Network infrastructure, server management, cybersecurity" },
-    { title: "Systems Analyst",       desc: "Requirements analysis, system design, process documentation" },
-    { title: "Web Developer",         desc: "Frontend/backend development, UI design, database integration" },
-  ],
-  "Business Development": [
-    { title: "Sales Representative", desc: "Client acquisition, product pitching, revenue generation" },
-    { title: "Marketing Specialist", desc: "Campaign management, brand promotion, market research" },
-    { title: "Business Analyst",     desc: "Market analysis, strategic planning, process improvement" },
-    { title: "Account Manager",      desc: "Client relationship management, retention, upselling" },
-    { title: "Entrepreneur / MSME",  desc: "Business ownership, product/service development, operations" },
-  ],
-  "Engineering and Manufacturing": [
+  "Engineering & Construction": [
     { title: "Civil Engineer",             desc: "Infrastructure design, construction management, project supervision" },
     { title: "Electrical Engineer",        desc: "Electrical systems, power distribution, equipment maintenance" },
     { title: "Mechanical Engineer",        desc: "Machine design, manufacturing processes, product development" },
-    { title: "Quality Assurance Engineer", desc: "Product testing, quality standards, process validation" },
-    { title: "Industrial Engineer",        desc: "Process optimization, production planning, efficiency improvement" },
+    { title: "Project Engineer",           desc: "Project planning, site supervision, cost estimation" },
+    { title: "Safety Officer",             desc: "Workplace safety compliance, hazard assessment, safety training" },
   ],
-  "Education": [
-    { title: "Elementary / HS Teacher",desc: "Classroom instruction, curriculum delivery, student assessment" },
+  "Education & Teaching": [
+    { title: "Elementary / HS Teacher", desc: "Classroom instruction, curriculum delivery, student assessment" },
     { title: "College Instructor",      desc: "Higher education teaching, course facilitation, research" },
     { title: "Curriculum Developer",    desc: "Learning material design, instructional design, program planning" },
     { title: "Education Administrator", desc: "School management, policy implementation, staff supervision" },
     { title: "Guidance Counselor",      desc: "Student support, career guidance, psychosocial services" },
   ],
-  "Data Analytics and Marketing": [
-    { title: "Data Analyst",                 desc: "Data cleaning, visualization, statistical analysis, reporting" },
+  "Marketing, Media & Creative": [
     { title: "Digital Marketing Specialist", desc: "SEO/SEM, social media management, content strategy" },
-    { title: "Business Intelligence Analyst",desc: "Dashboard development, KPI tracking, data-driven insights" },
-    { title: "Market Research Analyst",      desc: "Consumer insights, survey design, competitive analysis" },
+    { title: "Content Creator / Writer",     desc: "Copywriting, content production, brand storytelling" },
+    { title: "Graphic Designer",             desc: "Visual design, branding, digital and print media" },
+    { title: "Social Media Manager",         desc: "Community management, campaign execution, analytics" },
+    { title: "Creative Director",            desc: "Creative strategy, team leadership, campaign ideation" },
+  ],
+  "Data Analytics & Business Intelligence": [
+    { title: "Data Analyst",                  desc: "Data cleaning, visualization, statistical analysis, reporting" },
+    { title: "Business Intelligence Analyst", desc: "Dashboard development, KPI tracking, data-driven insights" },
     { title: "Data Science Associate",        desc: "Machine learning, predictive modeling, data pipeline" },
+    { title: "SQL / Database Analyst",        desc: "Query writing, database management, reporting" },
+    { title: "Financial Analyst",             desc: "Financial modeling, forecasting, investment analysis" },
+  ],
+  "Healthcare & Medical": [
+    { title: "Registered Nurse",          desc: "Patient care, clinical documentation, health assessment" },
+    { title: "Medical Technologist",      desc: "Laboratory analysis, diagnostic testing, specimen processing" },
+    { title: "Physical Therapist",        desc: "Rehabilitation programs, patient recovery, therapeutic exercises" },
+    { title: "Health Information Manager",desc: "Medical records, health data management, compliance" },
+    { title: "Pharmacist",                desc: "Drug dispensing, patient counseling, medication management" },
+  ],
+  "Business Development & Sales": [
+    { title: "Sales Representative",  desc: "Client acquisition, product pitching, revenue generation" },
+    { title: "Account Manager",       desc: "Client relationship management, retention, upselling" },
+    { title: "Business Analyst",      desc: "Market analysis, strategic planning, process improvement" },
+    { title: "Operations Manager",    desc: "Business operations, process improvement, team supervision" },
+    { title: "Entrepreneur / MSME",   desc: "Business ownership, product/service development, operations" },
   ],
 };
 
 function shortLabel(label) {
-  return label.split(" & ")[0].trim().split(" ").slice(0, 2).join(" ");
+  // Split on " & " or "," to get the first meaningful segment, then cap at 2 words
+  return label.split(/[,&]/)[0].trim().split(" ").slice(0, 2).join(" ");
 }
 
 // Returns a Google search URL for a skill term
@@ -307,7 +310,7 @@ export default function PortfolioPage({ user, onNavigate, tracerDone }) {
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom: 20 }}>
         <div>
           <h1 className="page-title">My Portfolio</h1>
-          <p className="page-sub">Your professional profile</p>
+          <p className="page-sub">Your professional profile with career path recommendation and skills analysis</p>
         </div>
         <div style={{ display:"flex", gap:8 }}>
           {!editing && (
@@ -499,7 +502,7 @@ export default function PortfolioPage({ user, onNavigate, tracerDone }) {
             <p style={{ fontSize:13, color:T.inkMuted, marginBottom:16, lineHeight:1.6 }}>
               Based on your <strong>{profile.program || "degree"}</strong>
               {profile.major && <> — <strong>{profile.major}</strong></>}
-              , here are the most relevant skill domains.
+              , here are your most relevant skill domains.
             </p>
 
             {loadingRecs && (
@@ -515,14 +518,14 @@ export default function PortfolioPage({ user, onNavigate, tracerDone }) {
 
             {!loadingRecs && !recsError && !recs && (
               <div className="empty">
-                <div className="empty-icon"></div>
+                <div className="empty-icon">🎓</div>
                 <div>Set your degree program in your profile to get recommendations.</div>
               </div>
             )}
 
             {!loadingRecs && recs && (
               <>
-{/* Topic keyword cards */}
+                {/* Topic keyword cards */}
                 <div className="form-label" style={{ marginBottom:8, marginTop:20 }}>
                   Top Skill Domains
                 </div>
@@ -614,6 +617,8 @@ export default function PortfolioPage({ user, onNavigate, tracerDone }) {
                       </div>
                     ));
                 })()}
+
+                
               </>
             )}
           </div>

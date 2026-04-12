@@ -4,6 +4,7 @@ frontend/node_modules/
 # Python
 backend/__pycache__/
 backend/data/users.json
+backend/data/tracer_responses.json
 
 # Dataset
 Datasets and Machine Learning Models

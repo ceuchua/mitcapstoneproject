@@ -42,6 +42,19 @@ function exportCSV(rows, filename) {
 function resolveLabel(question, value) {
   if (value == null || value === "") return "";
   if (!question) return String(value);
+
+  // Format date (YYYY-MM-DD) → readable string e.g. "January 15, 1999"
+  if (question.type === "date" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const d = new Date(value + "T00:00:00");
+    return d.toLocaleDateString("en-PH", { year:"numeric", month:"long", day:"numeric" });
+  }
+
+  // Format month (YYYY-MM) → readable string e.g. "March 2023"
+  if (question.type === "month" && /^\d{4}-\d{2}$/.test(value)) {
+    const d = new Date(value + "-01T00:00:00");
+    return d.toLocaleDateString("en-PH", { year:"numeric", month:"long" });
+  }
+
   const opts = question.options || [];
   const map  = Object.fromEntries(opts.map(o => [o.id, o.label]));
   if (Array.isArray(value)) return value.map(v => map[v] || v).join("; ");
@@ -443,7 +456,7 @@ export default function DashboardPage() {
                   borderRadius:12, padding:"14px 18px", marginBottom:20,
                   fontSize:13, lineHeight:1.7,
                 }}>
-                  Based on <strong>{totalStatus}</strong> tracer study
+                  📌 Based on <strong>{totalStatus}</strong> tracer study
                   response{totalStatus!==1?"s":""},{" "}
                   <strong style={{ color:empRate>=70?T.green:T.yellow }}>
                     {empRate}%
@@ -475,7 +488,7 @@ export default function DashboardPage() {
                   <div className="card-title">Industry Sector</div>
                   {sectorData.length === 0 ? (
                     <div className="empty" style={{ padding:40 }}>
-                      <div className="empty-icon">🏢</div>No data yet
+                      <div className="empty-icon"></div>No data yet
                     </div>
                   ) : (
                     <ResponsiveContainer width="100%"
@@ -537,7 +550,7 @@ export default function DashboardPage() {
             </div>
             {skillData.length === 0 ? (
               <div className="empty">
-                <div className="empty-icon">🔍</div>
+                <div className="empty-icon"></div>
                 No skill data yet. Skills will appear once graduates submit their responses.
               </div>
             ) : (
@@ -587,7 +600,7 @@ export default function DashboardPage() {
           <div className="card">
             <div className="card-title">Job Related to College Course?</div>
             {relTotal === 0 ? (
-              <div className="empty"><div className="empty-icon">📋</div>No data yet</div>
+              <div className="empty"><div className="empty-icon"></div>No data yet</div>
             ) : (
               <>
                 <p style={{ fontSize:13, marginBottom:16, lineHeight:1.6 }}>
@@ -655,7 +668,7 @@ export default function DashboardPage() {
         <div className="section">
           {surveyQuestions.length === 0 ? (
             <div className="card empty" style={{ padding:60 }}>
-              <div className="empty-icon">📋</div>
+              <div className="empty-icon"></div>
               <div style={{ fontWeight:600, marginBottom:8 }}>No additional questions</div>
               <div style={{ fontSize:13, color:T.inkMuted }}>
                 All survey questions are shown in the other tabs above.
@@ -735,7 +748,7 @@ export default function DashboardPage() {
 
           {responses.length === 0 ? (
             <div className="empty" style={{ padding:60 }}>
-              <div className="empty-icon">📋</div>
+              <div className="empty-icon"></div>
               <div style={{ fontWeight:600, marginBottom:8 }}>No responses yet</div>
               <div style={{ fontSize:13, color:T.inkMuted }}>
                 Share the tracer study link with graduates to start collecting responses.
@@ -743,7 +756,7 @@ export default function DashboardPage() {
             </div>
           ) : filteredResponses.length === 0 ? (
             <div className="empty" style={{ padding:40 }}>
-              <div className="empty-icon">🔍</div>
+              <div className="empty-icon"></div>
               No graduates match your search.
               <button className="btn btn-secondary btn-sm"
                 style={{ marginLeft:10 }} onClick={() => setSearch("")}>

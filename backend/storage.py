@@ -136,8 +136,8 @@ DEFAULT_QUESTIONS = [
         "protected":     False,
         "enabled":       True,
         "section":       "General Information",
-        "text":          "Birthday (Month / Day / Year)",
-        "type":          "text",
+        "text":          "Birthday",
+        "type":          "date",
         "options":       None,
         "required":      False,
         "order":         4,
@@ -260,41 +260,57 @@ DEFAULT_QUESTIONS = [
     },
 
     # Q13 — Professional Examinations Passed (3 columns)
+    # Gateway: has certifications?
+    {
+        "question_id":   "q_has_certifications",
+        "semantic_role": None,
+        "protected":     False,
+        "enabled":       True,
+        "section":       "Training & Professional Development",
+        "text":          "Have you passed any professional licensure or certification examination?",
+        "type":          "single_choice",
+        "options": [
+            {"id": "yes", "label": "Yes"},
+            {"id": "no",  "label": "No"},
+        ],
+        "required": False,
+        "order":    19,
+    },
     {
         "question_id":   "q_prof_exam_name",
         "semantic_role": None,
         "protected":     False,
         "enabled":       True,
-        "section":       "Educational Background",
+        "section":       "Training & Professional Development",
         "text":          "Name of Professional Examination Passed — e.g. Licensure Examination for Teachers (LET)",
         "type":          "text",
         "options":       None,
         "required":      False,
-        "order":         12,
+        "order":         20,
     },
     {
         "question_id":   "q_prof_exam_date",
         "semantic_role": None,
         "protected":     False,
         "enabled":       True,
-        "section":       "Educational Background",
-        "text":          "Date Taken — e.g. March 2023",
-        "type":          "text",
+        "section":       "Training & Professional Development",
+        "text":          "Date Taken (Month and Year) — e.g. March 2023",
+        "type":          "month",
         "options":       None,
         "required":      False,
-        "order":         13,
+        "order":         21,
     },
     {
         "question_id":   "q_prof_exam_rating",
         "semantic_role": None,
         "protected":     False,
         "enabled":       True,
-        "section":       "Educational Background",
+        "section":       "Training & Professional Development",
         "text":          "Rating or Score — e.g. 81.25%",
         "type":          "text",
         "options":       None,
         "required":      False,
-        "order":         14,
+        "order":         22,
     },
 
     # Q14 — Reason(s) for taking the course
@@ -322,50 +338,65 @@ DEFAULT_QUESTIONS = [
             {"id":"abroad",          "label":"Opportunity for employment abroad"},
             {"id":"no_choice",       "label":"No particular choice or no better idea"},
         ],
-        "required": False, "order": 15,
+        "required": False, "order": 12,
     },
 
     # ─────────────────────────────────────────────────────────────────────────
-    # SECTION C: TRAINING(S) / ADVANCE STUDIES  (CHED GTS Q15a-Q15b)
+    # SECTION C: TRAINING & PROFESSIONAL DEVELOPMENT  (CHED GTS Q13 + Q15)
     # Q15a split into 3 structured fields matching the CHED table columns.
     # ─────────────────────────────────────────────────────────────────────────
 
     # Q15a — Training Programs (3 columns)
     {
+        "question_id":   "q_has_training",
+        "semantic_role": None,
+        "protected":     False,
+        "enabled":       True,
+        "section":       "Training & Professional Development",
+        "text":          "Have you attended any training program or advance study after college?",
+        "type":          "single_choice",
+        "options": [
+            {"id": "yes", "label": "Yes"},
+            {"id": "no",  "label": "No"},
+        ],
+        "required": False,
+        "order":    13,
+    },
+        {
         "question_id":   "q_training_title",
         "semantic_role": None,
         "protected":     False,
         "enabled":       True,
-        "section":       "Training and Advance Studies",
+        "section":       "Training & Professional Development",
         "text":          "Title of Training Program or Advance Study attended after college",
         "type":          "text",
         "options":       None,
         "required":      False,
-        "order":         16,
+        "order":         14,
     },
     {
         "question_id":   "q_training_duration",
         "semantic_role": None,
         "protected":     False,
         "enabled":       True,
-        "section":       "Training and Advance Studies",
+        "section":       "Training & Professional Development",
         "text":          "Duration and Credits Earned — e.g. 3 days, 24 hours, 3 units",
         "type":          "text",
         "options":       None,
         "required":      False,
-        "order":         17,
+        "order":         15,
     },
     {
         "question_id":   "q_training_institution",
         "semantic_role": None,
         "protected":     False,
         "enabled":       True,
-        "section":       "Training and Advance Studies",
+        "section":       "Training & Professional Development",
         "text":          "Name of Training Institution, College, or University",
         "type":          "text",
         "options":       None,
         "required":      False,
-        "order":         18,
+        "order":         16,
     },
 
     # Q15b — Reason for advance studies
@@ -374,7 +405,7 @@ DEFAULT_QUESTIONS = [
         "semantic_role": None,
         "protected":     False,
         "enabled":       True,
-        "section":       "Training and Advance Studies",
+        "section":       "Training & Professional Development",
         "text":          "What made you pursue advance studies?",
         "type":          "single_choice",
         "options": [
@@ -382,7 +413,7 @@ DEFAULT_QUESTIONS = [
             {"id":"prof_dev",  "label":"For professional development"},
             {"id":"others",    "label":"Others"},
         ],
-        "required": False, "order": 19,
+        "required": False, "order": 17,
     },
 
     # ─────────────────────────────────────────────────────────────────────────

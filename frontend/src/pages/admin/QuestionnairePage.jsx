@@ -38,6 +38,18 @@ const QUESTION_TYPES = [
     description: "Student enters a whole number",
     example:     "e.g. \"How many months until you found a job?\"",
   },
+  {
+    id:          "date",
+    label:       "Date",
+    description: "Student picks a full date using a calendar picker",
+    example:     "e.g. \"Birthday\"",
+  },
+  {
+    id:          "month",
+    label:       "Month & Year",
+    description: "Student picks a month and year only (no specific day)",
+    example:     "e.g. \"Date examination was taken\"",
+  },
 ];
 
 const SECTIONS = ["Employment", "Skills", "Satisfaction", "Further Studies", "General"];
@@ -83,6 +95,27 @@ function AnswerPreview({ type, options }) {
         style={{ background: "#fff", border: `1px solid ${T.border}`,
           borderRadius: 6, padding: "8px 10px", width: 120, fontSize: 13 }}
         placeholder="0" />
+    </div>
+  );
+
+  if (type === "date") return (
+    <div style={previewStyle}>
+      <div style={labelStyle}>Student will see:</div>
+      <input readOnly type="date" value=""
+        style={{ background: "#fff", border: `1px solid ${T.border}`,
+          borderRadius: 6, padding: "8px 10px", width: 220, fontSize: 13 }} />
+    </div>
+  );
+
+  if (type === "month") return (
+    <div style={previewStyle}>
+      <div style={labelStyle}>Student will see:</div>
+      <input readOnly type="month" value=""
+        style={{ background: "#fff", border: `1px solid ${T.border}`,
+          borderRadius: 6, padding: "8px 10px", width: 220, fontSize: 13 }} />
+      <div style={{ fontSize:11, color: "#7A7168", marginTop:6, fontStyle:"italic" }}>
+        Month and year only — no specific day required.
+      </div>
     </div>
   );
 
