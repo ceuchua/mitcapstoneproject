@@ -446,42 +446,181 @@ def get_stats(authorization: Optional[str] = Header(None)):
 @app.get("/api/lda/skill-trends", tags=["LDA"])
 def skill_trends_from_responses(authorization: Optional[str] = Header(None)):
     """
-    Admin: run LDA on aggregated free-text skill answers from all responses.
-    This is the correct corpus-level use of LDA — across all graduates,
-    not on a single student's submission.
+    Admin: graduate competency analysis built directly from tracer study responses.
+    Returns three datasets:
+      1. competency_frequency  — how many graduates selected each CHED competency
+      2. competency_by_program — competency counts broken down by degree program
+      3. competency_by_sector  — competency counts broken down by employer sector
+    No NMF model is used here — counts are direct and accurate at any sample size.
     """
     _require_admin(authorization)
     questions = read_questions()
     responses = read_all_responses()
-    # Build option label map for skills_free_text (multi_choice)
-    q_map = {q.get("semantic_role"): q for q in questions if q.get("semantic_role")}
-    def _opt_label(q_obj, val):
-        """Resolve a multi_choice answer list to human-readable skill labels."""
-        if not q_obj or not val:
-            return ""
-        opts = {o["id"]: o["label"] for o in (q_obj.get("options") or [])}
-        if isinstance(val, list):
-            return " ".join(opts.get(v, v) for v in val)
-        return opts.get(val, val)
 
-    job_texts = []
     try:
+        # Resolve question IDs for semantic roles
+        q_map = {q.get("semantic_role"): q for q in questions if q.get("semantic_role")}
+        skills_q    = q_map.get("skills_free_text")
+        sector_q    = q_map.get("employer_sector")
+        emp_status_q= q_map.get("employment_status")
+
+        # Build label lookups for competencies and sectors
+        skill_labels  = {o["id"]: o["label"]
+                         for o in (skills_q.get("options") or [])} if skills_q else {}
+        sector_labels = {o["id"]: o["label"]
+                         for o in (sector_q.get("options") or [])} if sector_q else {}
+
+        # Load student profiles for program lookup
+        users     = list_users(role="student")
+        user_prog = {u["user_id"]: (u.get("program") or "Unknown Program")
+                     for u in users}
+
+        # ── Count competencies ────────────────────────────────────────────────
+        from collections import defaultdict, Counter
+
+        freq:       Counter                      = Counter()
+        by_program: dict[str, Counter]           = defaultdict(Counter)
+        by_sector:  dict[str, Counter]           = defaultdict(Counter)
+
+        n_responses = 0
+
         for r in responses:
-            ans   = r.get("answers", {})
-            # Option A: feed only skills_free_text + job_description (curriculum suggestions).
-            # job_title (PSOC category) is intentionally excluded — its label text
-            # ("Technicians and Associate Professionals", "Service Workers") contains
-            # generic words (service, support, care) that the NMF model trained on
-            # Philippine job postings associates with the Healthcare cluster, producing
-            # misleading topic scores for IT and business graduates.
-            parts = [
-                get_answer_by_role(ans, "job_description") or "",
-                _opt_label(q_map.get("skills_free_text"), get_answer_by_role(ans, "skills_free_text")),
-            ]
-            combined = " ".join(p for p in parts if p).strip()
-            if combined:
-                job_texts.append(combined)
-        return lda_analyzer.analyze_industry_trends(job_texts)
+            ans        = r.get("answers", {})
+            emp_status = get_answer_by_role(ans, "employment_status")
+            raw_skills = get_answer_by_role(ans, "skills_free_text")
+            raw_sector = get_answer_by_role(ans, "employer_sector")
+            program    = user_prog.get(r.get("user_id"), "Unknown Program")
+
+            if not raw_skills:
+                continue
+
+            skill_ids = raw_skills if isinstance(raw_skills, list) else [raw_skills]
+            if not skill_ids:
+                continue
+
+            n_responses += 1
+            sector_label = sector_labels.get(raw_sector, raw_sector) if raw_sector else "Not Specified"
+
+            for sid in skill_ids:
+                label = skill_labels.get(sid, sid)
+                freq[label]                     += 1
+                by_program[program][label]       += 1
+                by_sector[sector_label][label]   += 1
+
+        if n_responses == 0:
+            return {
+                "status":               "no_data",
+                "message":              "No competency data found. Graduates must complete the tracer study first.",
+                "n_responses":          0,
+                "competency_frequency": [],
+                "competency_by_program":[],
+                "competency_by_sector": [],
+            }
+
+        # ── Shape output ──────────────────────────────────────────────────────
+
+        # 1. Overall frequency — sorted descending
+        competency_frequency = [
+            {"competency": label, "count": count,
+             "pct": round(count / n_responses * 100, 1)}
+            for label, count in freq.most_common()
+        ]
+
+        # 2. By program — list of {program, competencies: [{competency, count}]}
+        competency_by_program = [
+            {
+                "program": prog,
+                "total":   sum(counts.values()),
+                "competencies": [
+                    {"competency": label, "count": cnt}
+                    for label, cnt in counts.most_common()
+                ],
+            }
+            for prog, counts in sorted(by_program.items(),
+                                       key=lambda x: -sum(x[1].values()))
+        ]
+
+        # 3. By sector — same shape as by_program
+        competency_by_sector = [
+            {
+                "sector": sect,
+                "total":  sum(counts.values()),
+                "competencies": [
+                    {"competency": label, "count": cnt}
+                    for label, cnt in counts.most_common()
+                ],
+            }
+            for sect, counts in sorted(by_sector.items(),
+                                       key=lambda x: -sum(x[1].values()))
+        ]
+
+        # 4. By course relevance — split graduates into two groups:
+        #    "related"  = job is related to their degree (q_first_job_related = yes)
+        #    "unrelated"= job is not related to their degree (q_first_job_related = no)
+        #    Both sides use the same CHED competency options — a valid apples-to-apples
+        #    comparison that answers: do course-relevant jobs require different competencies?
+        rel_counter:   Counter = Counter()
+        nrel_counter:  Counter = Counter()
+        rel_n  = 0
+        nrel_n = 0
+
+        for r in responses:
+            ans        = r.get("answers", {})
+            relevance  = get_answer_by_role(ans, "course_relevance")
+            raw_skills = get_answer_by_role(ans, "skills_free_text")
+            if not raw_skills:
+                continue
+            skill_ids = raw_skills if isinstance(raw_skills, list) else [raw_skills]
+            labels    = [skill_labels.get(sid, sid) for sid in skill_ids]
+
+            if relevance == "yes":
+                rel_n += 1
+                for lbl in labels: rel_counter[lbl] += 1
+            elif relevance == "no":
+                nrel_n += 1
+                for lbl in labels: nrel_counter[lbl] += 1
+
+        # All unique competencies across both groups
+        all_comp_labels = sorted(
+            set(list(rel_counter.keys()) + list(nrel_counter.keys())),
+            key=lambda x: -(rel_counter.get(x, 0) + nrel_counter.get(x, 0))
+        )
+
+        competency_by_relevance = {
+            "related": {
+                "n":           rel_n,
+                "label":       "Job is Related to Degree",
+                "competencies": [
+                    {"competency": lbl,
+                     "count":      rel_counter.get(lbl, 0),
+                     "pct":        round(rel_counter.get(lbl, 0) / rel_n * 100, 1)
+                                   if rel_n else 0}
+                    for lbl in all_comp_labels
+                ],
+            },
+            "unrelated": {
+                "n":           nrel_n,
+                "label":       "Job is Not Related to Degree",
+                "competencies": [
+                    {"competency": lbl,
+                     "count":      nrel_counter.get(lbl, 0),
+                     "pct":        round(nrel_counter.get(lbl, 0) / nrel_n * 100, 1)
+                                   if nrel_n else 0}
+                    for lbl in all_comp_labels
+                ],
+            },
+            "all_competencies": all_comp_labels,
+        }
+
+        return {
+            "status":                   "ok",
+            "n_responses":              n_responses,
+            "competency_frequency":     competency_frequency,
+            "competency_by_program":    competency_by_program,
+            "competency_by_sector":     competency_by_sector,
+            "competency_by_relevance":  competency_by_relevance,
+        }
+
     except Exception as e:
         logger.error("skill-trends endpoint error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Skill analysis failed: {str(e)}")
