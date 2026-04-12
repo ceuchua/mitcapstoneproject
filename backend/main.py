@@ -43,6 +43,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 
 from fastapi import FastAPI, HTTPException, Header, Query
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 
@@ -104,6 +105,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Global exception handler ──────────────────────────────────────────────────
+# Unhandled exceptions bypass CORSMiddleware, so browsers report a CORS error
+# instead of the actual 500. This catches everything and returns a proper
+# JSONResponse so CORS headers are always attached.
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc):
+    logger.error("Unhandled exception on %s: %s", request.url.path, exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error. Check server logs for details."},
+    )
 
 NOW      = lambda: datetime.now(timezone.utc).isoformat()
 EXPIRES  = lambda: (datetime.now(timezone.utc) + timedelta(minutes=SESSION_TIMEOUT_MINUTES)).isoformat()
@@ -452,22 +465,26 @@ def skill_trends_from_responses(authorization: Optional[str] = Header(None)):
         return opts.get(val, val)
 
     job_texts = []
-    for r in responses:
-        ans   = r.get("answers", {})
-        # Option A: feed only skills_free_text + job_description (curriculum suggestions).
-        # job_title (PSOC category) is intentionally excluded — its label text
-        # ("Technicians and Associate Professionals", "Service Workers") contains
-        # generic words (service, support, care) that the NMF model trained on
-        # Philippine job postings associates with the Healthcare cluster, producing
-        # misleading topic scores for IT and business graduates.
-        parts = [
-            get_answer_by_role(ans, "job_description") or "",
-            _opt_label(q_map.get("skills_free_text"), get_answer_by_role(ans, "skills_free_text")),
-        ]
-        combined = " ".join(p for p in parts if p).strip()
-        if combined:
-            job_texts.append(combined)
-    return lda_analyzer.analyze_industry_trends(job_texts)
+    try:
+        for r in responses:
+            ans   = r.get("answers", {})
+            # Option A: feed only skills_free_text + job_description (curriculum suggestions).
+            # job_title (PSOC category) is intentionally excluded — its label text
+            # ("Technicians and Associate Professionals", "Service Workers") contains
+            # generic words (service, support, care) that the NMF model trained on
+            # Philippine job postings associates with the Healthcare cluster, producing
+            # misleading topic scores for IT and business graduates.
+            parts = [
+                get_answer_by_role(ans, "job_description") or "",
+                _opt_label(q_map.get("skills_free_text"), get_answer_by_role(ans, "skills_free_text")),
+            ]
+            combined = " ".join(p for p in parts if p).strip()
+            if combined:
+                job_texts.append(combined)
+        return lda_analyzer.analyze_industry_trends(job_texts)
+    except Exception as e:
+        logger.error("skill-trends endpoint error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Skill analysis failed: {str(e)}")
 
 
 # ── Question toggle (admin) ───────────────────────────────────────────────────
